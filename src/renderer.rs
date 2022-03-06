@@ -2,11 +2,17 @@ use std::fmt::Write;
 
 use valuable::{Valuable, Value, Visit};
 
+use self::Segment::*;
 use crate::parser::Part;
+
+enum Segment<'a> {
+    Field(&'a str),
+    Idx(usize),
+}
 
 pub struct Renderer<'a, W> {
     writer: &'a mut W,
-    ctx: Vec<&'a str>,
+    ctx: Vec<Segment<'a>>,
 }
 
 impl<'a, W: Write> Renderer<'a, W> {
@@ -18,12 +24,12 @@ impl<'a, W: Write> Renderer<'a, W> {
     }
 
     pub fn render(&mut self, tokens: &'a [Part<'a>], valuable: &'a dyn Valuable) {
-        for token in tokens.into_iter() {
+        for token in tokens.iter() {
             match token {
                 Part::Text(text) => self.writer.write_str(text).unwrap(),
                 Part::Variable(name) => self.render_variable(name, valuable.as_value()),
                 Part::Section(name, tokens) => {
-                    self.ctx.push(name);
+                    self.ctx.push(Field(name));
                     self.render(tokens, valuable);
                     self.ctx.pop();
                 }
@@ -40,13 +46,13 @@ impl<'a, W: Write> Renderer<'a, W> {
 
 struct Variable<'a, W> {
     name: &'a str,
-    path: &'a [&'a str],
+    path: &'a [Segment<'a>],
     writer: &'a mut W,
     result: Result<bool, Error>,
 }
 
 impl<'a, W: Write> Variable<'a, W> {
-    fn new(name: &'a str, path: &'a [&'a str], writer: &'a mut W) -> Self {
+    fn new(name: &'a str, path: &'a [Segment<'a>], writer: &'a mut W) -> Self {
         Self {
             name,
             path,
@@ -90,10 +96,12 @@ impl<'a, W: Write> Visit for Variable<'a, W> {
 
     fn visit_named_fields(&mut self, named_values: &valuable::NamedValues<'_>) {
         if !self.path.is_empty() {
-            if let Some(value) = named_values.get_by_name(self.path[0]) {
-                let mut var = Variable::new(self.name, &self.path[1..], self.writer);
-                value.visit(&mut var);
-                self.result = var.result;
+            if let Field(name) = self.path[0] {
+                if let Some(value) = named_values.get_by_name(name) {
+                    let mut var = Variable::new(self.name, &self.path[1..], self.writer);
+                    value.visit(&mut var);
+                    self.result = var.result;
+                }
             }
         }
 
