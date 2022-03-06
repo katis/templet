@@ -65,6 +65,7 @@ impl<'a, W: Write> Variable<'a, W> {
 
     fn render_value(&mut self, value: &valuable::Value<'_>) {
         let result = match value {
+            Value::String(v) => self.writer.write_str(v),
             Value::Bool(v) => write!(self.writer, "{}", v),
             Value::Char(v) => write!(self.writer, "{}", v),
             Value::F32(v) => write!(self.writer, "{}", v),
@@ -75,7 +76,6 @@ impl<'a, W: Write> Variable<'a, W> {
             Value::I64(v) => write!(self.writer, "{}", v),
             Value::I128(v) => write!(self.writer, "{}", v),
             Value::Isize(v) => write!(self.writer, "{}", v),
-            Value::String(v) => write!(self.writer, "{}", v),
             Value::U8(v) => write!(self.writer, "{}", v),
             Value::U16(v) => write!(self.writer, "{}", v),
             Value::U32(v) => write!(self.writer, "{}", v),
@@ -101,16 +101,14 @@ impl<'a, W: Write> Visit for Variable<'a, W> {
             if let Some(value) = named_values.get_by_name(self.path[0]) {
                 let mut var = Variable::new(self.name, &self.path[1..], self.writer);
                 value.visit(&mut var);
-                if let Ok(false) = var.result {
-                    if let Some(value) = named_values.get_by_name(self.name) {
-                        self.render_value(value);
-                    }
-                }
-            } else if let Some(value) = named_values.get_by_name(self.name) {
+                self.result = var.result;
+            }
+        }
+
+        if let Ok(false) = self.result {
+            if let Some(value) = named_values.get_by_name(self.name) {
                 self.render_value(value);
             }
-        } else if let Some(value) = named_values.get_by_name(self.name) {
-            self.render_value(value);
         }
     }
 }

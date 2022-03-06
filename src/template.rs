@@ -85,4 +85,19 @@ mod tests {
         );
         assert_eq!(&s, "Joe@Broadway");
     }
+
+    #[test]
+    fn section_missing_value() {
+        let s = render(
+            "{{name}}@{{#address}}{{FOOBAR}}{{/address}}",
+            &User {
+                name: "Joe",
+                address: Address {
+                    street: "Broadway",
+                    number: 10,
+                },
+            },
+        );
+        assert_eq!(&s, "Joe@");
+    }
 }
