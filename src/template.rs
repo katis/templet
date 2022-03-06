@@ -15,6 +15,13 @@ impl<'a> Template<'a> {
         Template { tokens }
     }
 
+    pub fn parse_owned(input: &'a str) -> Template<'static> {
+        let tokens = TempletParser::parse(input);
+        Template {
+            tokens: tokens.into_iter().map(|t| t.into_owned()).collect(),
+        }
+    }
+
     pub fn render(&self, ctx: &dyn Valuable) -> String {
         let mut str = String::new();
         let mut renderer = Renderer::new(&mut str);

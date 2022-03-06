@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use nom::{
     branch::alt,
     bytes::complete::{is_not, tag, take_until, take_until1},
@@ -15,10 +17,24 @@ type Result<'a, T = Token<'a>> = IResult<Span<'a>, T>;
 
 #[derive(Debug, Eq, PartialEq)]
 pub enum Token<'a> {
-    Text(&'a str),
-    Variable(&'a str),
-    Section(&'a str, Vec<Token<'a>>),
+    Text(Cow<'a, str>),
+    Variable(Cow<'a, str>),
+    Section(Cow<'a, str>, Vec<Token<'a>>),
     Comment,
+}
+
+impl<'a> Token<'a> {
+    pub fn into_owned(self) -> Token<'static> {
+        match self {
+            Token::Text(t) => Token::Text(Cow::Owned(t.into_owned())),
+            Token::Variable(t) => Token::Variable(Cow::Owned(t.into_owned())),
+            Token::Section(name, tokens) => Token::Section(
+                Cow::Owned(name.into_owned()),
+                tokens.into_iter().map(|t| t.into_owned()).collect(),
+            ),
+            Token::Comment => Token::Comment,
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -50,7 +66,7 @@ fn parse_comment(input: Span) -> Result {
 fn parse_variable(input: Span) -> Result {
     let (input, variable) =
         delimited(not(tag("{{/")).and(tag("{{")), is_not("}}"), tag("}}"))(input)?;
-    Ok((input, Token::Variable(variable.trim())))
+    Ok((input, Token::Variable(Cow::Borrowed(variable.trim()))))
 }
 
 fn parse_section(input: Span) -> Result {
@@ -58,7 +74,7 @@ fn parse_section(input: Span) -> Result {
     let (input, contents) = dbg!(parse_parts(input))?;
     let (input, _) = tag_end(name)(input)?;
 
-    Ok((input, Token::Section(name, contents)))
+    Ok((input, Token::Section(Cow::Borrowed(name), contents)))
 }
 
 fn start_tag<'a>(open: &'a str) -> impl Fn(Span<'a>) -> Result<&'a str> + 'a {
@@ -84,7 +100,7 @@ fn parse_text(s: Span) -> Result {
     if text.is_empty() {
         return Err(Err::Error(nom::error::Error::new(input, ErrorKind::Eof)));
     }
-    Ok((input, Token::Text(&text)))
+    Ok((input, Token::Text(Cow::Borrowed(&text))))
 }
 
 #[cfg(test)]
@@ -93,10 +109,19 @@ mod tests {
 
     use Token::*;
 
+    use std::borrow::Cow::*;
+
     #[test]
     fn simple_variable() {
         let result = TempletParser::parse("<h1>{{title}}</h1>");
-        assert_eq!(result, vec![Text("<h1>"), Variable("title"), Text("</h1>")]);
+        assert_eq!(
+            result,
+            vec![
+                Text(Borrowed("<h1>")),
+                Variable(Borrowed("title")),
+                Text(Borrowed("</h1>"))
+            ]
+        );
     }
 
     #[test]
@@ -114,9 +139,16 @@ mod tests {
             result,
             vec![
                 Comment,
-                Text("<ul>"),
-                Section("items", vec![Text("<li>"), Variable("id"), Text("</li>")]),
-                Text("</ul>")
+                Text(Borrowed("<ul>")),
+                Section(
+                    Cow::Borrowed("items"),
+                    vec![
+                        Text(Borrowed("<li>")),
+                        Variable(Borrowed("id")),
+                        Text(Borrowed("</li>"))
+                    ]
+                ),
+                Text(Borrowed("</ul>"))
             ]
         );
     }
