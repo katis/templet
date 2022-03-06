@@ -17,10 +17,6 @@ impl<'a, W: Write> Renderer<'a, W> {
         }
     }
 
-    pub(crate) fn from_parts(writer: &'a mut W, ctx: Vec<&'a str>) -> Self {
-        Self { writer, ctx }
-    }
-
     pub fn render(&mut self, tokens: &'a [Token<'a>], valuable: &'a dyn Valuable) {
         for token in tokens.into_iter() {
             match token {
@@ -57,10 +53,6 @@ impl<'a, W: Write> Variable<'a, W> {
             writer,
             result: Ok(false),
         }
-    }
-
-    fn render(&mut self, valuable: &dyn Valuable) {
-        valuable.visit(self);
     }
 
     fn render_value(&mut self, value: &valuable::Value<'_>) {
@@ -115,44 +107,4 @@ impl<'a, W: Write> Visit for Variable<'a, W> {
 
 pub enum Error {
     Fmt(std::fmt::Error),
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::parser::TempletParser;
-
-    use super::*;
-
-    #[derive(Valuable)]
-    struct Titled<'a> {
-        title: &'a str,
-    }
-
-    // #[test]
-    // fn test() {
-    //     let tokens = TempletParser::parse(r#"<h1>{{title}}</h1>"#);
-    //     let mut s = String::new();
-    //     let renderer = Renderer::new(tokens);
-    //     renderer.render(
-    //         &mut s,
-    //         &Titled {
-    //             title: "Hello, world!",
-    //         },
-    //     );
-    //     assert_eq!(s.trim(), "<h1>Hello, world!</h1>");
-    // }
-
-    // #[test]
-    // fn test() {
-    //     let tokens = TempletParser::parse(r#"<h1>{{title}}</h1>"#);
-    //     let mut s = String::new();
-    //     let renderer = Renderer::new(tokens);
-    //     renderer.render(
-    //         &mut s,
-    //         &Titled {
-    //             title: "Hello, world!",
-    //         },
-    //     );
-    //     assert_eq!(s.trim(), "<h1>Hello, world!</h1>");
-    // }
 }

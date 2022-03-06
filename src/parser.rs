@@ -1,13 +1,10 @@
-use std::hash::Hasher;
-
-use fnv::FnvHasher;
 use nom::{
     branch::alt,
     bytes::complete::{is_not, tag, take_until, take_until1},
-    combinator::{not, opt, rest},
+    combinator::{not, rest},
     error::ErrorKind,
-    multi::{fold_many0, many0},
-    sequence::{delimited, terminated},
+    multi::many0,
+    sequence::delimited,
     Err, IResult, Parser,
 };
 use nom_locate::LocatedSpan;
@@ -22,12 +19,6 @@ pub enum Token<'a> {
     Variable(&'a str),
     Section(&'a str, Vec<Token<'a>>),
     Comment,
-}
-
-fn hash(str: &str) -> u64 {
-    let mut hasher = FnvHasher::default();
-    hasher.write(str.as_bytes());
-    hasher.finish()
 }
 
 #[derive(Debug)]
