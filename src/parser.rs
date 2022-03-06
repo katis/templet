@@ -15,7 +15,7 @@ type Span<'a> = LocatedSpan<&'a str, ()>;
 
 type Result<'a, T = Token<'a>> = IResult<Span<'a>, T>;
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Token<'a> {
     Text(Cow<'a, str>),
     Variable(Cow<'a, str>),

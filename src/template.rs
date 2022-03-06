@@ -5,6 +5,7 @@ use crate::{
     renderer::Renderer,
 };
 
+#[derive(Clone)]
 pub struct Template<'a> {
     tokens: Vec<Token<'a>>,
 }
