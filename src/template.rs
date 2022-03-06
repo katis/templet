@@ -9,19 +9,19 @@ use crate::{
 
 #[derive(Clone)]
 pub struct Template<'a> {
-    tokens: Vec<Part<'a>>,
+    parts: Vec<Part<'a>>,
 }
 
 impl<'a> Template<'a> {
     pub fn parse(input: &'a str) -> Self {
-        let tokens = TempletParser::parse(input);
-        Template { tokens }
+        let parts = TempletParser::parse(input);
+        Template { parts }
     }
 
     pub fn parse_owned(input: &'a str) -> Template<'static> {
-        let tokens = TempletParser::parse(input);
+        let parts = TempletParser::parse(input);
         Template {
-            tokens: tokens.into_iter().map(|t| t.into_owned()).collect(),
+            parts: parts.into_iter().map(|t| t.into_owned()).collect(),
         }
     }
 
@@ -33,7 +33,7 @@ impl<'a> Template<'a> {
 
     pub fn render_to<W: Write>(&self, writer: &mut W, ctx: &dyn Valuable) {
         let mut renderer = Renderer::new(writer);
-        renderer.render(&self.tokens, ctx);
+        renderer.render(&self.parts, ctx);
     }
 }
 
