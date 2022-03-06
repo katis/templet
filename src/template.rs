@@ -1,3 +1,5 @@
+use std::fmt::Write;
+
 use valuable::Valuable;
 
 use crate::{
@@ -25,9 +27,13 @@ impl<'a> Template<'a> {
 
     pub fn render(&self, ctx: &dyn Valuable) -> String {
         let mut str = String::new();
-        let mut renderer = Renderer::new(&mut str);
-        renderer.render(&self.tokens, ctx);
+        self.render_to(&mut str, ctx);
         str
+    }
+
+    pub fn render_to<W: Write>(&self, writer: &mut W, ctx: &dyn Valuable) {
+        let mut renderer = Renderer::new(writer);
+        renderer.render(&self.tokens, ctx);
     }
 }
 
