@@ -3,13 +3,13 @@ use std::fmt::Write;
 use valuable::Valuable;
 
 use crate::{
-    parser::{TempletParser, Token},
+    parser::{Part, TempletParser},
     renderer::Renderer,
 };
 
 #[derive(Clone)]
 pub struct Template<'a> {
-    tokens: Vec<Token<'a>>,
+    tokens: Vec<Part<'a>>,
 }
 
 impl<'a> Template<'a> {

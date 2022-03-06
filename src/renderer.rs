@@ -2,7 +2,7 @@ use std::fmt::Write;
 
 use valuable::{Valuable, Value, Visit};
 
-use crate::parser::Token;
+use crate::parser::Part;
 
 pub struct Renderer<'a, W> {
     writer: &'a mut W,
@@ -17,17 +17,17 @@ impl<'a, W: Write> Renderer<'a, W> {
         }
     }
 
-    pub fn render(&mut self, tokens: &'a [Token<'a>], valuable: &'a dyn Valuable) {
+    pub fn render(&mut self, tokens: &'a [Part<'a>], valuable: &'a dyn Valuable) {
         for token in tokens.into_iter() {
             match token {
-                Token::Text(text) => self.writer.write_str(text).unwrap(),
-                Token::Variable(name) => self.render_variable(name, valuable.as_value()),
-                Token::Section(name, tokens) => {
+                Part::Text(text) => self.writer.write_str(text).unwrap(),
+                Part::Variable(name) => self.render_variable(name, valuable.as_value()),
+                Part::Section(name, tokens) => {
                     self.ctx.push(name);
                     self.render(tokens, valuable);
                     self.ctx.pop();
                 }
-                Token::Comment => {}
+                Part::Comment => {}
             }
         }
     }

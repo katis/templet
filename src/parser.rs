@@ -13,26 +13,26 @@ use nom_locate::LocatedSpan;
 
 type Span<'a> = LocatedSpan<&'a str, ()>;
 
-type Result<'a, T = Token<'a>> = IResult<Span<'a>, T>;
+type Result<'a, T = Part<'a>> = IResult<Span<'a>, T>;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub enum Token<'a> {
+pub enum Part<'a> {
     Text(Cow<'a, str>),
     Variable(Cow<'a, str>),
-    Section(Cow<'a, str>, Vec<Token<'a>>),
+    Section(Cow<'a, str>, Vec<Part<'a>>),
     Comment,
 }
 
-impl<'a> Token<'a> {
-    pub fn into_owned(self) -> Token<'static> {
+impl<'a> Part<'a> {
+    pub fn into_owned(self) -> Part<'static> {
         match self {
-            Token::Text(t) => Token::Text(Cow::Owned(t.into_owned())),
-            Token::Variable(t) => Token::Variable(Cow::Owned(t.into_owned())),
-            Token::Section(name, tokens) => Token::Section(
+            Part::Text(text) => Part::Text(Cow::Owned(text.into_owned())),
+            Part::Variable(var) => Part::Variable(Cow::Owned(var.into_owned())),
+            Part::Section(name, tokens) => Part::Section(
                 Cow::Owned(name.into_owned()),
                 tokens.into_iter().map(|t| t.into_owned()).collect(),
             ),
-            Token::Comment => Token::Comment,
+            Part::Comment => Part::Comment,
         }
     }
 }
@@ -41,14 +41,14 @@ impl<'a> Token<'a> {
 pub struct TempletParser {}
 
 impl TempletParser {
-    pub fn parse(s: &str) -> Vec<Token> {
+    pub fn parse(s: &str) -> Vec<Part> {
         let span = Span::new(s);
         let tokens = parse_parts(span);
         tokens.map(|(_, tokens)| tokens).unwrap()
     }
 }
 
-fn parse_parts(input: Span) -> Result<Vec<Token>> {
+fn parse_parts(input: Span) -> Result<Vec<Part>> {
     let (input, tokens) = many0(alt((
         parse_comment,
         parse_section,
@@ -60,13 +60,13 @@ fn parse_parts(input: Span) -> Result<Vec<Token>> {
 
 fn parse_comment(input: Span) -> Result {
     let (input, _) = delimited(tag("\\{{"), is_not("}}"), tag("}}"))(input)?;
-    Ok((input, Token::Comment))
+    Ok((input, Part::Comment))
 }
 
 fn parse_variable(input: Span) -> Result {
     let (input, variable) =
         delimited(not(tag("{{/")).and(tag("{{")), is_not("}}"), tag("}}"))(input)?;
-    Ok((input, Token::Variable(Cow::Borrowed(variable.trim()))))
+    Ok((input, Part::Variable(Cow::Borrowed(variable.trim()))))
 }
 
 fn parse_section(input: Span) -> Result {
@@ -74,7 +74,7 @@ fn parse_section(input: Span) -> Result {
     let (input, contents) = dbg!(parse_parts(input))?;
     let (input, _) = tag_end(name)(input)?;
 
-    Ok((input, Token::Section(Cow::Borrowed(name), contents)))
+    Ok((input, Part::Section(Cow::Borrowed(name), contents)))
 }
 
 fn start_tag<'a>(open: &'a str) -> impl Fn(Span<'a>) -> Result<&'a str> + 'a {
@@ -100,16 +100,16 @@ fn parse_text(s: Span) -> Result {
     if text.is_empty() {
         return Err(Err::Error(nom::error::Error::new(input, ErrorKind::Eof)));
     }
-    Ok((input, Token::Text(Cow::Borrowed(&text))))
+    Ok((input, Part::Text(Cow::Borrowed(&text))))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    use Token::*;
-
     use std::borrow::Cow::*;
+
+    use Part::*;
 
     #[test]
     fn simple_variable() {
