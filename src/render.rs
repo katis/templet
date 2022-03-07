@@ -81,8 +81,8 @@ impl<'a, W: Write> Variable<'a, W> {
     fn render_value(&mut self, value: Value) -> Result<bool, std::fmt::Error> {
         let result = match value {
             Value::String(v) => self.writer.write_str(v),
+            Value::Char(v) => self.writer.write_char(v),
             Value::Bool(v) => write!(self.writer, "{}", v),
-            Value::Char(v) => write!(self.writer, "{}", v),
             Value::F32(v) => write!(self.writer, "{}", v),
             Value::F64(v) => write!(self.writer, "{}", v),
             Value::I8(v) => write!(self.writer, "{}", v),
