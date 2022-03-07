@@ -16,63 +16,51 @@ pub fn render<W: Write>(
     Ok(())
 }
 
-struct Section<'a, W> {
-    name: String,
-    parts: &'a [Part],
-    writer: &'a mut W,
-    context: Context<'a>,
-    result: Result<(), std::fmt::Error>,
+struct Context<'v> {
+    stack: Vec<Value<'v>>,
 }
 
-impl<'a, W> Section<'a, W> {
-    fn new(name: String, parts: &'a [Part], writer: &'a mut W, context: Context<'a>) -> Self {
+impl<'v> Context<'v> {
+    fn new(initial: Value<'v>) -> Self {
         Self {
-            name,
-            parts,
-            writer,
-            context,
-            result: Ok(()),
-        }
-    }
-}
-
-impl<'a, W: Write> Visit for Section<'a, W> {
-    fn visit_value(&mut self, value: Value<'_>) {
-        match value {
-            Value::Structable(s) => s.visit(self),
-            Value::Enumerable(e) => {
-                if e.variant().name() == self.name {
-                    let mut ctx = self.context.clone();
-                    ctx.push(e.as_value());
-                    for part in self.parts.iter() {
-                        ctx.render_part(self.writer, part).unwrap();
-                    }
-                }
-            }
-            _ => (),
+            stack: vec![initial],
         }
     }
 
-    fn visit_named_fields(&mut self, named_values: &valuable::NamedValues<'_>) {
-        if self.result.is_err() {
-            return;
+    fn clone(&self) -> Self {
+        Context {
+            stack: self.stack.clone(),
         }
-        if let Some(&value) = named_values.get_by_name(&self.name) {
-            if let Value::Listable(l) = value {
-                let mut list = ListSection::new(self.parts, self.writer, self.context.clone());
-                l.visit(&mut list);
-                self.result = list.result;
-            } else {
-                let mut ctx = self.context.clone();
-                ctx.push(value);
-                for part in self.parts.iter() {
-                    if let Err(err) = ctx.render_part(self.writer, part) {
-                        self.result = Err(err);
-                        return;
+    }
+
+    fn push(&mut self, value: Value<'v>) {
+        self.stack.push(value);
+    }
+
+    fn render_part<W: Write>(&self, writer: &mut W, part: &Part) -> Result<(), std::fmt::Error> {
+        match part {
+            Part::Variable(name) => {
+                for value in self.stack.iter().rev() {
+                    let mut var = Variable::new(name.clone(), writer);
+                    value.visit(&mut var);
+                    if var.render_result()? {
+                        return Ok(());
                     }
                 }
             }
-        }
+            Part::Section(name, parts) => {
+                if let Some(last) = self.stack.last() {
+                    let mut section = Section::new(name.clone(), parts, writer, self.clone());
+                    last.visit(&mut section);
+                    section.result?;
+                }
+            }
+            Part::Text(text) => {
+                return writer.write_str(text.as_str());
+            }
+            Part::Comment => {}
+        };
+        Ok(())
     }
 }
 
@@ -152,6 +140,66 @@ impl<'a, W: Write> Visit for Variable<'a, W> {
     }
 }
 
+struct Section<'a, W> {
+    name: String,
+    parts: &'a [Part],
+    writer: &'a mut W,
+    context: Context<'a>,
+    result: Result<(), std::fmt::Error>,
+}
+
+impl<'a, W> Section<'a, W> {
+    fn new(name: String, parts: &'a [Part], writer: &'a mut W, context: Context<'a>) -> Self {
+        Self {
+            name,
+            parts,
+            writer,
+            context,
+            result: Ok(()),
+        }
+    }
+}
+
+impl<'a, W: Write> Visit for Section<'a, W> {
+    fn visit_value(&mut self, value: Value<'_>) {
+        match value {
+            Value::Structable(s) => s.visit(self),
+            Value::Enumerable(e) => {
+                if e.variant().name() == self.name {
+                    let mut ctx = self.context.clone();
+                    ctx.push(e.as_value());
+                    for part in self.parts.iter() {
+                        ctx.render_part(self.writer, part).unwrap();
+                    }
+                }
+            }
+            _ => (),
+        }
+    }
+
+    fn visit_named_fields(&mut self, named_values: &valuable::NamedValues<'_>) {
+        if self.result.is_err() {
+            return;
+        }
+        if let Some(&value) = named_values.get_by_name(&self.name) {
+            if let Value::Listable(l) = value {
+                let mut list = ListSection::new(self.parts, self.writer, self.context.clone());
+                l.visit(&mut list);
+                self.result = list.result;
+            } else {
+                let mut ctx = self.context.clone();
+                ctx.push(value);
+                for part in self.parts.iter() {
+                    if let Err(err) = ctx.render_part(self.writer, part) {
+                        self.result = Err(err);
+                        return;
+                    }
+                }
+            }
+        }
+    }
+}
+
 struct ListSection<'a, W> {
     parts: &'a [Part],
     writer: &'a mut W,
@@ -185,53 +233,5 @@ impl<'a, W: Write> Visit for ListSection<'a, W> {
                 return;
             }
         }
-    }
-}
-
-struct Context<'v> {
-    stack: Vec<Value<'v>>,
-}
-
-impl<'v> Context<'v> {
-    fn new(initial: Value<'v>) -> Self {
-        Self {
-            stack: vec![initial],
-        }
-    }
-
-    fn clone(&self) -> Self {
-        Context {
-            stack: self.stack.clone(),
-        }
-    }
-
-    fn push(&mut self, value: Value<'v>) {
-        self.stack.push(value);
-    }
-
-    fn render_part<W: Write>(&self, writer: &mut W, part: &Part) -> Result<(), std::fmt::Error> {
-        match part {
-            Part::Variable(name) => {
-                for value in self.stack.iter().rev() {
-                    let mut var = Variable::new(name.clone(), writer);
-                    value.visit(&mut var);
-                    if var.render_result()? {
-                        return Ok(());
-                    }
-                }
-            }
-            Part::Section(name, parts) => {
-                if let Some(last) = self.stack.last() {
-                    let mut section = Section::new(name.clone(), parts, writer, self.clone());
-                    last.visit(&mut section);
-                    section.result?;
-                }
-            }
-            Part::Text(text) => {
-                return writer.write_str(text.as_str());
-            }
-            Part::Comment => {}
-        };
-        Ok(())
     }
 }
