@@ -16,6 +16,7 @@ pub fn render<W: Write>(
     Ok(())
 }
 
+#[derive(Debug, Clone)]
 struct Context<'v> {
     stack: Vec<Value<'v>>,
 }
@@ -24,12 +25,6 @@ impl<'v> Context<'v> {
     fn new(initial: Value<'v>) -> Self {
         Self {
             stack: vec![initial],
-        }
-    }
-
-    fn clone(&self) -> Self {
-        Context {
-            stack: self.stack.clone(),
         }
     }
 
