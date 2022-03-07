@@ -4,36 +4,32 @@ use valuable::Valuable;
 
 use crate::{
     parser::{Part, TempletParser},
-    renderer::Renderer,
+    render::render,
 };
 
 #[derive(Clone)]
-pub struct Template<'a> {
-    parts: Vec<Part<'a>>,
+pub struct Template {
+    parts: Vec<Part>,
 }
 
-impl<'a> Template<'a> {
-    pub fn parse(input: &'a str) -> Self {
+impl Template {
+    pub fn parse(input: &str) -> Self {
         let parts = TempletParser::parse(input);
         Template { parts }
     }
 
-    pub fn parse_owned(input: &'a str) -> Template<'static> {
-        let parts = TempletParser::parse(input);
-        Template {
-            parts: parts.into_iter().map(|t| t.into_owned()).collect(),
-        }
-    }
-
-    pub fn render(&self, ctx: &dyn Valuable) -> String {
+    pub fn render(&self, ctx: &dyn Valuable) -> Result<String, std::fmt::Error> {
         let mut str = String::new();
-        self.render_to(&mut str, ctx);
-        str
+        self.render_to(&mut str, ctx)?;
+        Ok(str)
     }
 
-    pub fn render_to<W: Write>(&self, writer: &mut W, ctx: &dyn Valuable) {
-        let mut renderer = Renderer::new(writer);
-        renderer.render(&self.parts, ctx);
+    pub fn render_to<W: Write>(
+        &self,
+        writer: &mut W,
+        ctx: &dyn Valuable,
+    ) -> Result<(), std::fmt::Error> {
+        render(writer, &self.parts, ctx.as_value())
     }
 }
 
@@ -45,6 +41,7 @@ mod tests {
     struct User<'a> {
         name: &'a str,
         address: Address<'a>,
+        roles: Vec<Role<'a>>,
     }
 
     #[derive(Valuable)]
@@ -53,9 +50,14 @@ mod tests {
         number: i32,
     }
 
+    #[derive(Valuable)]
+    struct Role<'a> {
+        name: &'a str,
+    }
+
     fn render(source: &str, ctx: &dyn Valuable) -> String {
         let tpl = Template::parse(source);
-        tpl.render(ctx)
+        tpl.render(ctx).unwrap()
     }
 
     #[test]
@@ -80,6 +82,7 @@ mod tests {
                     street: "Broadway",
                     number: 10,
                 },
+                roles: vec![],
             },
         );
         assert_eq!(&s, "- Joe@Broadway -");
@@ -95,6 +98,7 @@ mod tests {
                     street: "Broadway",
                     number: 10,
                 },
+                roles: vec![],
             },
         );
         assert_eq!(&s, "Joe@Broadway");
@@ -110,8 +114,29 @@ mod tests {
                     street: "Broadway",
                     number: 10,
                 },
+                roles: vec![],
             },
         );
         assert_eq!(&s, "Joe@");
+    }
+
+    #[test]
+    fn list() {
+        let s = render(
+            "{{#roles}}{{name}}, {{/roles}}",
+            &User {
+                name: "Joe",
+                address: Address {
+                    street: "Broadway",
+                    number: 10,
+                },
+                roles: vec![
+                    Role { name: "SALES" },
+                    Role { name: "SUPPORT" },
+                    Role { name: "BASIC" },
+                ],
+            },
+        );
+        assert_eq!(&s, "SALES, SUPPORT, BASIC, ");
     }
 }

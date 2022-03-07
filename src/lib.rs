@@ -1,5 +1,5 @@
 mod parser;
-mod renderer;
+mod render;
 mod template;
 
 pub use template::Template;
