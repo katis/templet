@@ -139,4 +139,45 @@ mod tests {
         );
         assert_eq!(&s, "SALES, SUPPORT, BASIC, ");
     }
+
+    #[derive(Valuable)]
+    enum Cost {
+        Subscription { monthly_price: i32 },
+        Purchase { price: i32 },
+    }
+
+    static SIMPLE_ENUM_TEMPLATE: &str = "{{#Subscription}}Monthly price: {{monthly_price}}{{/Subscription}}{{#Purchase}}Price: {{price}}{{/Purchase}}";
+
+    #[test]
+    fn simple_enum_section1() {
+        let s = render(
+            SIMPLE_ENUM_TEMPLATE,
+            &Cost::Subscription { monthly_price: 12 },
+        );
+        assert_eq!(&s, "Monthly price: 12")
+    }
+
+    #[test]
+    fn simple_enum_section2() {
+        let s = render(SIMPLE_ENUM_TEMPLATE, &Cost::Purchase { price: 33 });
+        assert_eq!(&s, "Price: 33")
+    }
+
+    #[derive(Valuable)]
+    struct Product<'a> {
+        name: &'a str,
+        cost: Cost,
+    }
+
+    #[test]
+    fn enum_in_section() {
+        let s = render(
+            "Name: {{name}}{{#cost}}{{#Purchase}}, Price: {{price}}e{{/Purchase}}{{/cost}}",
+            &Product {
+                name: "Book",
+                cost: Cost::Purchase { price: 33 },
+            },
+        );
+        assert_eq!(&s, "Name: Book, Price: 33e")
+    }
 }

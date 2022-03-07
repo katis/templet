@@ -38,8 +38,19 @@ impl<'a, W> Section<'a, W> {
 
 impl<'a, W: Write> Visit for Section<'a, W> {
     fn visit_value(&mut self, value: Value<'_>) {
-        if let Value::Structable(s) = value {
-            s.visit(self)
+        println!("Section {}", &self.name);
+        match value {
+            Value::Structable(s) => s.visit(self),
+            Value::Enumerable(e) => {
+                if e.variant().name() == self.name {
+                    let mut ctx = self.context.clone();
+                    ctx.push(e.as_value());
+                    for part in self.parts.iter() {
+                        ctx.render_part(self.writer, part).unwrap();
+                    }
+                }
+            }
+            _ => (),
         }
     }
 
@@ -47,6 +58,7 @@ impl<'a, W: Write> Visit for Section<'a, W> {
         if self.result.is_err() {
             return;
         }
+        println!("NAME({}) {:?}", &self.name, &named_values);
         if let Some(&value) = named_values.get_by_name(&self.name) {
             if let Value::Listable(l) = value {
                 let mut list = ListSection::new(self.parts, self.writer, self.context.clone());
@@ -119,6 +131,9 @@ impl<'a, W: Write> Visit for Variable<'a, W> {
             }
             Value::Mappable(m) => {
                 m.visit(self);
+            }
+            Value::Enumerable(e) => {
+                e.visit(self);
             }
             _ => (),
         }
