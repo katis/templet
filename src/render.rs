@@ -145,7 +145,7 @@ struct Section<'a, W> {
     result: Result<(), Error>,
 }
 
-impl<'a, W> Section<'a, W> {
+impl<'a, W: Write> Section<'a, W> {
     fn new(field: Field, parts: &'a [Part], writer: &'a mut W, context: Context<'a>) -> Self {
         Self {
             field,
@@ -153,6 +153,24 @@ impl<'a, W> Section<'a, W> {
             writer,
             context,
             result: Ok(()),
+        }
+    }
+
+    fn render_value(&mut self, value: Value<'_>) {
+        match value {
+            Value::Listable(l) => {
+                let mut list = ListSection::new(self.parts, self.writer, self.context.clone());
+                l.visit(&mut list);
+                self.result = list.result;
+            }
+            Value::Bool(true) => {
+                self.result = self.context.render_parts(self.writer, self.parts);
+            }
+            Value::Bool(false) | Value::Unit => {}
+            _ => {
+                let ctx = self.context.append(value);
+                self.result = ctx.render_parts(self.writer, self.parts);
+            }
         }
     }
 }
@@ -176,22 +194,15 @@ impl<'a, W: Write> Visit for Section<'a, W> {
 
         if let Field::Named(name) = &self.field {
             if let Some(&value) = named_values.get_by_name(&name) {
-                match value {
-                    Value::Listable(l) => {
-                        let mut list =
-                            ListSection::new(self.parts, self.writer, self.context.clone());
-                        l.visit(&mut list);
-                        self.result = list.result;
-                    }
-                    Value::Bool(true) => {
-                        self.result = self.context.render_parts(self.writer, self.parts);
-                    }
-                    Value::Bool(false) | Value::Unit => {}
-                    _ => {
-                        let ctx = self.context.append(value);
-                        self.result = ctx.render_parts(self.writer, self.parts);
-                    }
-                }
+                self.render_value(value);
+            }
+        }
+    }
+
+    fn visit_unnamed_fields(&mut self, values: &[Value<'_>]) {
+        if let Field::Index(i) = &self.field {
+            if let Some(&value) = values.get(*i as usize) {
+                self.render_value(value);
             }
         }
     }

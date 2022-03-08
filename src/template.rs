@@ -279,4 +279,52 @@ mod tests {
         );
         assert_eq!(&s, "")
     }
+
+    #[derive(Valuable)]
+    struct Data<'a>(ErrorMsg<'a>);
+
+    #[test]
+    fn positional_section() {
+        let s = render(
+            "{{#0}}Error: {{msg}}.{{/0}}",
+            &Data(ErrorMsg {
+                has_error: true,
+                msg: "invalid email",
+            }),
+        );
+        assert_eq!(&s, "Error: invalid email.")
+    }
+
+    #[test]
+    fn positional_section_missing() {
+        let s = render(
+            "{{#1}}Error: {{msg}}.{{/1}}",
+            &Data(ErrorMsg {
+                has_error: true,
+                msg: "invalid email",
+            }),
+        );
+        assert_eq!(&s, "")
+    }
+
+    #[derive(Valuable)]
+    struct OptData<'a>(Option<ErrorMsg<'a>>);
+
+    #[test]
+    fn opt_positional_section_some() {
+        let s = render(
+            "{{#0}}Error: {{msg}}.{{/0}}",
+            &OptData(Some(ErrorMsg {
+                has_error: true,
+                msg: "invalid email",
+            })),
+        );
+        assert_eq!(&s, "Error: invalid email.")
+    }
+
+    #[test]
+    fn opt_positional_section_none() {
+        let s = render("{{#0}}Error: {{msg}}.{{/0}}", &OptData(None));
+        assert_eq!(&s, "")
+    }
 }
