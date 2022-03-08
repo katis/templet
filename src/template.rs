@@ -180,4 +180,32 @@ mod tests {
         );
         assert_eq!(&s, "Name: Book, Price: 33e")
     }
+
+    #[derive(Valuable)]
+    struct User2<'a> {
+        address: Option<Address<'a>>,
+    }
+
+    #[test]
+    fn optional_section_none() {
+        let s = render(
+            "{{#address}}Street: {{street}}{{/address}}",
+            &User2 { address: None },
+        );
+        assert_eq!(&s, "");
+    }
+
+    #[test]
+    fn optional_section_some() {
+        let s = render(
+            "{{#address}}Street: {{street}}{{/address}}",
+            &User2 {
+                address: Some(Address {
+                    street: "Baker Street",
+                    number: 221,
+                }),
+            },
+        );
+        assert_eq!(&s, "Street: Baker Street");
+    }
 }

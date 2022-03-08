@@ -177,19 +177,58 @@ impl<'a, W: Write> Visit for Section<'a, W> {
             return;
         }
         if let Some(&value) = named_values.get_by_name(&self.name) {
-            if let Value::Listable(l) = value {
-                let mut list = ListSection::new(self.parts, self.writer, self.context.clone());
-                l.visit(&mut list);
-                self.result = list.result;
-            } else {
-                let mut ctx = self.context.clone();
-                ctx.push(value);
-                for part in self.parts.iter() {
-                    if let Err(err) = ctx.render_part(self.writer, part) {
-                        self.result = Err(err);
-                        return;
+            match value {
+                Value::Listable(l) => {
+                    let mut list = ListSection::new(self.parts, self.writer, self.context.clone());
+                    l.visit(&mut list);
+                    self.result = list.result;
+                }
+                Value::Unit => {}
+                _ => {
+                    let mut ctx = self.context.clone();
+                    ctx.push(value);
+                    for part in self.parts.iter() {
+                        if let Err(err) = ctx.render_part(self.writer, part) {
+                            self.result = Err(err);
+                            return;
+                        }
                     }
                 }
+            }
+        }
+    }
+}
+
+struct OptionSection<'a, W> {
+    parts: &'a [Part],
+    writer: &'a mut W,
+    context: Context<'a>,
+    result: Result<(), std::fmt::Error>,
+}
+
+impl<'a, W> OptionSection<'a, W> {
+    fn new(parts: &'a [Part], writer: &'a mut W, context: Context<'a>) -> Self {
+        Self {
+            parts,
+            writer,
+            context,
+            result: Ok(()),
+        }
+    }
+}
+
+impl<'a, W: Write> Visit for OptionSection<'a, W> {
+    fn visit_value(&mut self, _value: Value<'_>) {
+        unreachable!()
+    }
+
+    fn visit_unnamed_fields(&mut self, values: &[Value<'_>]) {
+        if let Some(value) = values.get(0) {
+            let mut ctx = self.context.clone();
+            ctx.push(*value);
+
+            for part in self.parts.iter() {
+                self.result = ctx.render_part(self.writer, part);
             }
         }
     }
