@@ -135,6 +135,14 @@ impl<'a, W: Write> Visit for Variable<'a, W> {
             _ => {}
         }
     }
+
+    fn visit_unnamed_fields(&mut self, values: &[Value<'_>]) {
+        if let Field::Index(i) = &self.field {
+            if let Some(&value) = values.get(*i as usize) {
+                self.render_result = self.render_value(value);
+            }
+        }
+    }
 }
 
 struct Section<'a, W> {

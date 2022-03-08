@@ -327,4 +327,13 @@ mod tests {
         let s = render("{{#0}}Error: {{msg}}.{{/0}}", &OptData(None));
         assert_eq!(&s, "")
     }
+
+    #[derive(Valuable)]
+    struct Positional<'a>(&'a str, i32);
+
+    #[test]
+    fn positional_variable() {
+        let s = render("Name: {{0}}, age: {{1}}", &Positional("Joe", 23));
+        assert_eq!(&s, "Name: Joe, age: 23")
+    }
 }
