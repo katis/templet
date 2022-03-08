@@ -250,6 +250,19 @@ mod tests {
         assert_eq!(&s, "Products: Butter, Bread, ");
     }
 
+    #[test]
+    fn list_items_inverted() {
+        let s = render(
+            "Products: {{#products}}{{product}}, {{/products}}{{^products}}none{{/products}}",
+            &User2 {
+                name: Some("Joe Mama"),
+                address: None,
+                products: vec![],
+            },
+        );
+        assert_eq!(&s, "Products: none");
+    }
+
     #[derive(Valuable)]
     struct ErrorMsg<'a> {
         has_error: bool,
@@ -259,7 +272,7 @@ mod tests {
     #[test]
     fn bool_section_true() {
         let s = render(
-            "{{#has_error}}Error: {{msg}}.{{/has_error}}",
+            "{{#has_error}}Error: {{msg}}.{{/has_error}}{{^has_error}}OK{{/has_error}}",
             &ErrorMsg {
                 has_error: true,
                 msg: "invalid email",
@@ -271,13 +284,13 @@ mod tests {
     #[test]
     fn bool_section_false() {
         let s = render(
-            "{{#has_error}}Error: {{msg}}.{{/has_error}}",
+            "{{#has_error}}Error: {{msg}}.{{/has_error}}{{^has_error}}OK{{/has_error}}",
             &ErrorMsg {
                 has_error: false,
                 msg: "invalid email",
             },
         );
-        assert_eq!(&s, "")
+        assert_eq!(&s, "OK")
     }
 
     #[derive(Valuable)]
@@ -324,8 +337,8 @@ mod tests {
 
     #[test]
     fn opt_positional_section_none() {
-        let s = render("{{#0}}Error: {{msg}}.{{/0}}", &OptData(None));
-        assert_eq!(&s, "")
+        let s = render("{{#0}}Error: {{msg}}.{{/0}}{{^0}}OK{{/0}}", &OptData(None));
+        assert_eq!(&s, "OK")
     }
 
     #[derive(Valuable)]

@@ -56,6 +56,15 @@ impl<'v> Context<'v> {
                 }
                 Ok(())
             }
+            Part::InvertedSection(name, parts) => {
+                if let Some(last) = self.stack.last() {
+                    let mut section =
+                        InvertedSection::new(name.clone(), parts, writer, self.clone());
+                    last.visit(&mut section);
+                    section.result?;
+                }
+                Ok(())
+            }
             Part::Text(text) => writer.write_all(text.as_bytes()),
             Part::Comment => Ok(()),
         }
@@ -244,5 +253,71 @@ impl<'a, W: Write> Visit for ListSection<'a, W> {
 
         let ctx = self.context.append(value);
         self.result = ctx.render_parts(self.writer, self.parts);
+    }
+}
+
+struct InvertedSection<'a, W> {
+    field: Field,
+    parts: &'a [Part],
+    writer: &'a mut W,
+    context: Context<'a>,
+    result: Result<(), Error>,
+}
+
+impl<'a, W: Write> InvertedSection<'a, W> {
+    fn new(field: Field, parts: &'a [Part], writer: &'a mut W, context: Context<'a>) -> Self {
+        Self {
+            field,
+            parts,
+            writer,
+            context,
+            result: Ok(()),
+        }
+    }
+
+    fn render_parts(&mut self, value: Option<&Value<'_>>) {
+        self.result = match value {
+            None => self.context.render_parts(self.writer, self.parts),
+            Some(Value::Bool(false)) => self.context.render_parts(self.writer, self.parts),
+            Some(Value::Unit) => self.context.render_parts(self.writer, self.parts),
+            Some(Value::Listable(l)) if (0, Some(0)) == l.size_hint() => {
+                self.context.render_parts(self.writer, self.parts)
+            }
+            Some(Value::Mappable(m)) if (0, Some(0)) == m.size_hint() => {
+                self.context.render_parts(self.writer, self.parts)
+            }
+            _ => return,
+        };
+    }
+}
+
+impl<'a, W: Write> Visit for InvertedSection<'a, W> {
+    fn visit_value(&mut self, value: Value<'_>) {
+        if let Value::Structable(s) = value {
+            s.visit(self)
+        }
+    }
+
+    fn visit_named_fields(&mut self, named_values: &valuable::NamedValues<'_>) {
+        if self.result.is_err() {
+            return;
+        }
+
+        if let Field::Named(name) = &self.field {
+            let field = named_values.get_by_name(&name);
+            self.render_parts(field);
+        }
+    }
+
+    fn visit_unnamed_fields(&mut self, values: &[Value<'_>]) {
+        if self.result.is_err() {
+            return;
+        }
+
+        if let Field::Index(i) = &self.field {
+            let field = values.get(*i as usize);
+            println!("Field {:?} = {:?}", &self.field, &field);
+            self.render_parts(field);
+        }
     }
 }

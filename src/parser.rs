@@ -19,6 +19,7 @@ pub enum Part {
     Text(String),
     Variable(Field),
     Section(Field, Vec<Part>),
+    InvertedSection(Field, Vec<Part>),
     Comment,
 }
 
@@ -43,6 +44,7 @@ fn parse_parts(input: Span) -> Result<Vec<Part>> {
     let (input, tokens) = many0(alt((
         parse_comment,
         parse_section,
+        parse_inverted_section,
         parse_variable,
         parse_text,
     )))(input)?;
@@ -68,6 +70,15 @@ fn parse_section(input: Span) -> Result {
     let (input, _) = tag_end(field.clone())(input)?;
 
     Ok((input, Part::Section(field, contents)))
+}
+
+fn parse_inverted_section(input: Span) -> Result {
+    let (input, field) = start_tag("{{^")(input)?;
+
+    let (input, contents) = parse_parts(input)?;
+    let (input, _) = tag_end(field.clone())(input)?;
+
+    Ok((input, Part::InvertedSection(field, contents)))
 }
 
 fn start_tag<'a>(open: &'a str) -> impl Fn(Span<'a>) -> Result<Field> + 'a {
