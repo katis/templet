@@ -26,8 +26,10 @@ impl<'v> Context<'v> {
         }
     }
 
-    fn push(&mut self, value: Value<'v>) {
-        self.stack.push(value);
+    fn append(&self, value: Value<'v>) -> Context {
+        let mut ctx = self.clone();
+        ctx.stack.push(value);
+        ctx
     }
 
     fn render_parts<W: Write>(
@@ -170,8 +172,7 @@ impl<'a, W: Write> Visit for Section<'a, W> {
             Value::Structable(s) => s.visit(self),
             Value::Enumerable(e) => {
                 if e.variant().name() == self.name {
-                    let mut ctx = self.context.clone();
-                    ctx.push(e.as_value());
+                    let ctx = self.context.append(e.as_value());
                     self.result = ctx.render_parts(self.writer, self.parts);
                 }
             }
@@ -195,8 +196,7 @@ impl<'a, W: Write> Visit for Section<'a, W> {
                 }
                 Value::Bool(_) | Value::Unit => {}
                 _ => {
-                    let mut ctx = self.context.clone();
-                    ctx.push(value);
+                    let ctx = self.context.append(value);
                     self.result = ctx.render_parts(self.writer, self.parts);
                 }
             }
@@ -230,8 +230,7 @@ impl<'a, W: Write> Visit for ListSection<'a, W> {
             return;
         }
 
-        let mut ctx = self.context.clone();
-        ctx.push(value);
+        let ctx = self.context.append(value);
         self.result = ctx.render_parts(self.writer, self.parts);
     }
 }
