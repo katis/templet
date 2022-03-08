@@ -282,9 +282,9 @@ impl<'a, W: Write> InvertedSection<'a, W> {
 
     fn render_parts(&mut self, value: Option<&Value<'_>>) {
         self.result = match value {
-            None => self.context.render_parts(self.writer, self.parts),
-            Some(Value::Bool(false)) => self.context.render_parts(self.writer, self.parts),
-            Some(Value::Unit) => self.context.render_parts(self.writer, self.parts),
+            None | Some(Value::Bool(false) | Value::Unit) => {
+                self.context.render_parts(self.writer, self.parts)
+            }
             Some(Value::Listable(l)) if (0, Some(0)) == l.size_hint() => {
                 self.context.render_parts(self.writer, self.parts)
             }
