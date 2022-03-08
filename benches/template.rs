@@ -1,5 +1,3 @@
-use std::io::BufWriter;
-
 use criterion::{criterion_group, criterion_main, Criterion};
 use ramhorns::Content;
 use templet::Template;
