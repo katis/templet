@@ -137,6 +137,19 @@ mod tests {
     }
 
     #[test]
+    fn simple_variable_index() {
+        let result = TempletParser::parse("<h1>{{ 0 }}</h1>");
+        assert_eq!(
+            result,
+            vec![
+                Text("<h1>".into()),
+                Variable(Index(0)),
+                Text("</h1>".into())
+            ]
+        );
+    }
+
+    #[test]
     fn text_wtf() {
         let result = TempletParser::parse("{{/foobar}}");
         assert_eq!(result, vec![]);
@@ -162,6 +175,15 @@ mod tests {
                 ),
                 Text("</ul>".into())
             ]
+        );
+    }
+
+    #[test]
+    fn simple_section_index() {
+        let result = TempletParser::parse("{{#0}}{{foobar}}{{/0}}");
+        assert_eq!(
+            result,
+            vec![Section(Index(0), vec![Variable(Named("foobar".into()))])]
         );
     }
 }
