@@ -188,10 +188,10 @@ impl<'a, W: Write> Visit for Section<'a, W> {
                     l.visit(&mut list);
                     self.result = list.result;
                 }
-                Value::Bool(bool) if bool => {
+                Value::Bool(true) => {
                     self.result = self.context.render_parts(self.writer, self.parts);
                 }
-                Value::Bool(_) | Value::Unit => {}
+                Value::Bool(false) | Value::Unit => {}
                 _ => {
                     let ctx = self.context.append(value);
                     self.result = ctx.render_parts(self.writer, self.parts);
