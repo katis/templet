@@ -1,4 +1,4 @@
-use std::fmt::Write;
+use std::io::Write;
 
 use valuable::{Valuable, Value, Visit};
 
@@ -42,7 +42,7 @@ impl<'v> Context<'v> {
                 for value in self.stack.iter().rev() {
                     let mut var = Variable::new(name.clone(), writer);
                     value.visit(&mut var);
-                    if var.render_result()? {
+                    if var.render_result? {
                         return Ok(());
                     }
                 }
@@ -56,7 +56,7 @@ impl<'v> Context<'v> {
                 }
                 Ok(())
             }
-            Part::Text(text) => writer.write_str(text.as_str()),
+            Part::Text(text) => writer.write_all(text.as_bytes()),
             Part::Comment => Ok(()),
         }
     }
@@ -77,14 +77,10 @@ impl<'a, W: Write> Variable<'a, W> {
         }
     }
 
-    fn render_result(&self) -> Result<bool, Error> {
-        self.render_result
-    }
-
     fn render_value(&mut self, value: Value) -> Result<bool, Error> {
         let result = match value {
-            Value::String(v) => self.writer.write_str(v),
-            Value::Char(v) => self.writer.write_char(v),
+            Value::String(v) => write!(self.writer, "{}", v),
+            Value::Char(v) => write!(self.writer, "{}", v),
             Value::Bool(v) => write!(self.writer, "{}", v),
             Value::F32(v) => write!(self.writer, "{}", v),
             Value::F64(v) => write!(self.writer, "{}", v),

@@ -1,1 +1,1 @@
-pub type Error = std::fmt::Error;
+pub type Error = std::io::Error;

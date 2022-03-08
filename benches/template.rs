@@ -79,7 +79,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
 
     c.bench_function("render", |b| {
         let t = Template::parse(PAGE);
-        let mut buf = String::new();
+        let mut buf = Vec::new();
         let ctx = &Page {
             title: "Weird store",
             products: &[

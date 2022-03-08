@@ -1,4 +1,4 @@
-use std::fmt::Write;
+use std::io::Write;
 
 use valuable::Valuable;
 
@@ -20,9 +20,9 @@ impl Template {
     }
 
     pub fn render(&self, ctx: &dyn Valuable) -> Result<String, Error> {
-        let mut str = String::new();
-        self.render_to(&mut str, ctx)?;
-        Ok(str)
+        let mut buf = Vec::new();
+        self.render_to(&mut buf, ctx)?;
+        Ok(String::from_utf8(buf).unwrap())
     }
 
     pub fn render_to<W: Write>(&self, writer: &mut W, ctx: &dyn Valuable) -> Result<(), Error> {
