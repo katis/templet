@@ -1,32 +1,34 @@
+use std::io::BufWriter;
+
 use criterion::{criterion_group, criterion_main, Criterion};
+use ramhorns::Content;
 use templet::Template;
 use valuable::Valuable;
 
-#[derive(Valuable)]
+#[derive(Valuable, Content)]
 struct Page<'a> {
     title: &'a str,
     products: &'a [Product<'a>],
 }
 
-#[derive(Valuable)]
+#[derive(Valuable, Content)]
 struct Item<'a> {
     name: &'a str,
 }
 
-#[derive(Valuable)]
+#[derive(Valuable, Content)]
 struct Product<'a> {
     name: &'a str,
     price: Price,
     images: &'a [Image<'a>],
 }
 
-#[derive(Valuable)]
-enum Price {
-    Monthly { payment: i32 },
-    Purchase { price: i32 },
+#[derive(Valuable, Content)]
+struct Price {
+    price: i32,
 }
 
-#[derive(Valuable)]
+#[derive(Valuable, Content)]
 struct Image<'a> {
     title: &'a str,
     href: &'a str,
@@ -46,12 +48,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
             <li>
               <h2>{{name}}</h2>
               {{#price}}
-                {{#Monthly}}
-                  {{payment}}e / month
-                {{/Monthly}}
-                {{#Purchase}}
-                  {{price}}e
-                {{/Purchase}}
+                Price: {{price}}e
               {{/price}}
               <ul>
                 {{#images}}
@@ -63,6 +60,22 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         </ul>
       </body>
     </html>"#;
+
+    c.bench_function("parse", |b| {
+        let mut template = None;
+
+        b.iter(|| {
+            template = Some(Template::parse(PAGE));
+        });
+    });
+
+    c.bench_function("parse_ramhorns", |b| {
+        let mut template = None;
+
+        b.iter(|| {
+            template = ramhorns::Template::new(PAGE).ok();
+        });
+    });
 
     c.bench_function("render", |b| {
         let t = Template::parse(PAGE);
@@ -76,7 +89,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
                         title: "Netflix",
                         href: "/netflix.logo.svg",
                     }],
-                    price: Price::Monthly { payment: 13 },
+                    price: Price { price: 13 },
                 },
                 Product {
                     name: "Artisan Bread",
@@ -84,7 +97,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
                         title: "Bread",
                         href: "/bread.jpg",
                     }],
-                    price: Price::Purchase { price: 4 },
+                    price: Price { price: 4 },
                 },
                 Product {
                     name: "Orange juice",
@@ -92,7 +105,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
                         title: "Orange juice",
                         href: "/orange-juice.jpg",
                     }],
-                    price: Price::Purchase { price: 4 },
+                    price: Price { price: 4 },
                 },
             ],
         };
@@ -101,6 +114,45 @@ pub fn criterion_benchmark(c: &mut Criterion) {
             t.render_to(&mut buf, &ctx).unwrap();
             buf.clear();
         })
+    });
+
+    c.bench_function("render_ramhorns", |b| {
+        let template = ramhorns::Template::new(PAGE).unwrap();
+        let mut buf = Vec::new();
+        let ctx = &Page {
+            title: "Weird store",
+            products: &[
+                Product {
+                    name: "Netflix subscription",
+                    images: &[Image {
+                        title: "Netflix",
+                        href: "/netflix.logo.svg",
+                    }],
+                    price: Price { price: 13 },
+                },
+                Product {
+                    name: "Artisan Bread",
+                    images: &[Image {
+                        title: "Bread",
+                        href: "/bread.jpg",
+                    }],
+                    price: Price { price: 4 },
+                },
+                Product {
+                    name: "Orange juice",
+                    images: &[Image {
+                        title: "Orange juice",
+                        href: "/orange-juice.jpg",
+                    }],
+                    price: Price { price: 4 },
+                },
+            ],
+        };
+
+        b.iter(|| {
+            template.render_to_writer(&mut buf, ctx).unwrap();
+            buf.clear();
+        });
     });
 }
 
