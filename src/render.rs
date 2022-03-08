@@ -10,9 +10,7 @@ pub fn render<W: Write>(
     value: Value,
 ) -> Result<(), std::fmt::Error> {
     let ctx = Context::new(value);
-    for part in parts.iter() {
-        ctx.render_part(writer, part)?;
-    }
+    ctx.render_parts(writer, parts)?;
     Ok(())
 }
 
@@ -30,6 +28,17 @@ impl<'v> Context<'v> {
 
     fn push(&mut self, value: Value<'v>) {
         self.stack.push(value);
+    }
+
+    fn render_parts<W: Write>(
+        &self,
+        writer: &mut W,
+        parts: &[Part],
+    ) -> Result<(), std::fmt::Error> {
+        for part in parts.iter() {
+            self.render_part(writer, part)?;
+        }
+        Ok(())
     }
 
     fn render_part<W: Write>(&self, writer: &mut W, part: &Part) -> Result<(), std::fmt::Error> {
@@ -163,9 +172,7 @@ impl<'a, W: Write> Visit for Section<'a, W> {
                 if e.variant().name() == self.name {
                     let mut ctx = self.context.clone();
                     ctx.push(e.as_value());
-                    for part in self.parts.iter() {
-                        ctx.render_part(self.writer, part).unwrap();
-                    }
+                    self.result = ctx.render_parts(self.writer, self.parts);
                 }
             }
             _ => (),
@@ -184,24 +191,13 @@ impl<'a, W: Write> Visit for Section<'a, W> {
                     self.result = list.result;
                 }
                 Value::Bool(bool) if bool => {
-                    let ctx = self.context.clone();
-                    for part in self.parts.iter() {
-                        if let Err(err) = ctx.render_part(self.writer, part) {
-                            self.result = Err(err);
-                            return;
-                        }
-                    }
+                    self.result = self.context.render_parts(self.writer, self.parts);
                 }
                 Value::Bool(_) | Value::Unit => {}
                 _ => {
                     let mut ctx = self.context.clone();
                     ctx.push(value);
-                    for part in self.parts.iter() {
-                        if let Err(err) = ctx.render_part(self.writer, part) {
-                            self.result = Err(err);
-                            return;
-                        }
-                    }
+                    self.result = ctx.render_parts(self.writer, self.parts);
                 }
             }
         }
@@ -236,12 +232,6 @@ impl<'a, W: Write> Visit for ListSection<'a, W> {
 
         let mut ctx = self.context.clone();
         ctx.push(value);
-
-        for part in self.parts {
-            if let Err(err) = ctx.render_part(self.writer, part) {
-                self.result = Err(err);
-                return;
-            }
-        }
+        self.result = ctx.render_parts(self.writer, self.parts);
     }
 }
