@@ -4,7 +4,7 @@ use valuable::Valuable;
 
 use crate::{
     errors::Error,
-    parser::{parse, Part},
+    parse::{parse, Part},
     render::render,
 };
 

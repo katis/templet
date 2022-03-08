@@ -1,5 +1,5 @@
 mod errors;
-mod parser;
+mod parse;
 mod render;
 mod template;
 

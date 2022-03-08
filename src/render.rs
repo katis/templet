@@ -3,7 +3,7 @@ use std::io::Write;
 use valuable::{Valuable, Value, Visit};
 
 use crate::errors::Error;
-use crate::parser::{Field, Part};
+use crate::parse::{Field, Part};
 
 pub fn render<W: Write>(writer: &mut W, parts: &[Part], value: Value) -> Result<(), Error> {
     let ctx = Context::new(value);
