@@ -3,7 +3,7 @@ use std::io::Write;
 use valuable::{Valuable, Value, Visit};
 
 use crate::errors::Error;
-use crate::parser::Part;
+use crate::parser::{Field, Part};
 
 pub fn render<W: Write>(writer: &mut W, parts: &[Part], value: Value) -> Result<(), Error> {
     let ctx = Context::new(value);
@@ -63,15 +63,15 @@ impl<'v> Context<'v> {
 }
 
 struct Variable<'a, W> {
-    name: String,
+    field: Field,
     writer: &'a mut W,
     render_result: Result<bool, Error>,
 }
 
 impl<'a, W: Write> Variable<'a, W> {
-    fn new(name: String, writer: &'a mut W) -> Self {
+    fn new(field: Field, writer: &'a mut W) -> Self {
         Self {
-            name,
+            field,
             writer,
             render_result: Ok(false),
         }
@@ -120,22 +120,25 @@ impl<'a, W: Write> Visit for Variable<'a, W> {
     }
 
     fn visit_named_fields(&mut self, named_values: &valuable::NamedValues<'_>) {
-        if let Some(value) = named_values.get_by_name(&self.name) {
-            self.render_result = self.render_value(*value);
+        if let Field::Named(name) = &self.field {
+            if let Some(value) = named_values.get_by_name(&name) {
+                self.render_result = self.render_value(*value);
+            }
         }
     }
 
     fn visit_entry(&mut self, key: Value<'_>, value: Value<'_>) {
-        if let Value::String(key) = key {
-            if key == self.name {
+        match (&self.field, key) {
+            (Field::Named(name), Value::String(key)) if name == key => {
                 self.render_result = self.render_value(value);
             }
+            _ => {}
         }
     }
 }
 
 struct Section<'a, W> {
-    name: String,
+    field: Field,
     parts: &'a [Part],
     writer: &'a mut W,
     context: Context<'a>,
@@ -143,9 +146,9 @@ struct Section<'a, W> {
 }
 
 impl<'a, W> Section<'a, W> {
-    fn new(name: String, parts: &'a [Part], writer: &'a mut W, context: Context<'a>) -> Self {
+    fn new(field: Field, parts: &'a [Part], writer: &'a mut W, context: Context<'a>) -> Self {
         Self {
-            name,
+            field,
             parts,
             writer,
             context,
@@ -156,13 +159,11 @@ impl<'a, W> Section<'a, W> {
 
 impl<'a, W: Write> Visit for Section<'a, W> {
     fn visit_value(&mut self, value: Value<'_>) {
-        match value {
-            Value::Structable(s) => s.visit(self),
-            Value::Enumerable(e) => {
-                if e.variant().name() == self.name {
-                    let ctx = self.context.append(e.as_value());
-                    self.result = ctx.render_parts(self.writer, self.parts);
-                }
+        match (&self.field, value) {
+            (_, Value::Structable(s)) => s.visit(self),
+            (Field::Named(name), Value::Enumerable(e)) if name == e.variant().name() => {
+                let ctx = self.context.append(e.as_value());
+                self.result = ctx.render_parts(self.writer, self.parts);
             }
             _ => (),
         }
@@ -172,20 +173,24 @@ impl<'a, W: Write> Visit for Section<'a, W> {
         if self.result.is_err() {
             return;
         }
-        if let Some(&value) = named_values.get_by_name(&self.name) {
-            match value {
-                Value::Listable(l) => {
-                    let mut list = ListSection::new(self.parts, self.writer, self.context.clone());
-                    l.visit(&mut list);
-                    self.result = list.result;
-                }
-                Value::Bool(true) => {
-                    self.result = self.context.render_parts(self.writer, self.parts);
-                }
-                Value::Bool(false) | Value::Unit => {}
-                _ => {
-                    let ctx = self.context.append(value);
-                    self.result = ctx.render_parts(self.writer, self.parts);
+
+        if let Field::Named(name) = &self.field {
+            if let Some(&value) = named_values.get_by_name(&name) {
+                match value {
+                    Value::Listable(l) => {
+                        let mut list =
+                            ListSection::new(self.parts, self.writer, self.context.clone());
+                        l.visit(&mut list);
+                        self.result = list.result;
+                    }
+                    Value::Bool(true) => {
+                        self.result = self.context.render_parts(self.writer, self.parts);
+                    }
+                    Value::Bool(false) | Value::Unit => {}
+                    _ => {
+                        let ctx = self.context.append(value);
+                        self.result = ctx.render_parts(self.writer, self.parts);
+                    }
                 }
             }
         }

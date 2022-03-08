@@ -1,11 +1,12 @@
 use nom::{
     branch::alt,
     bytes::complete::{is_not, tag, take_until, take_until1},
-    combinator::{not, rest},
+    character::complete::space0,
+    combinator::{recognize, rest},
     error::ErrorKind,
-    multi::many0,
-    sequence::delimited,
-    Err, IResult, Parser,
+    multi::{many0, many0_count},
+    sequence::{delimited, pair},
+    Err, IResult,
 };
 use nom_locate::LocatedSpan;
 
@@ -16,9 +17,15 @@ type Result<'a, T = Part> = IResult<Span<'a>, T>;
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Part {
     Text(String),
-    Variable(String),
-    Section(String, Vec<Part>),
+    Variable(Field),
+    Section(Field, Vec<Part>),
     Comment,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Field {
+    Index(u8),
+    Named(String),
 }
 
 #[derive(Debug)]
@@ -48,33 +55,37 @@ fn parse_comment(input: Span) -> Result {
 }
 
 fn parse_variable(input: Span) -> Result {
-    let (input, variable) =
-        delimited(not(tag("{{/")).and(tag("{{")), is_not("}}"), tag("}}"))(input)?;
-    Ok((input, Part::Variable(variable.trim().to_owned())))
+    let (input, _) = tag("{{")(input)?;
+    let (input, field) = delimited(space0, field, space0)(input)?;
+    let (input, _) = tag("}}")(input)?;
+    Ok((input, Part::Variable(field)))
 }
 
 fn parse_section(input: Span) -> Result {
-    let (input, name) = start_tag("{{#")(input)?;
+    let (input, field) = start_tag("{{#")(input)?;
 
     let (input, contents) = parse_parts(input)?;
-    let (input, _) = tag_end(name)(input)?;
+    let (input, _) = tag_end(field.clone())(input)?;
 
-    Ok((input, Part::Section(name.to_owned(), contents)))
+    Ok((input, Part::Section(field, contents)))
 }
 
-fn start_tag<'a>(open: &'a str) -> impl Fn(Span<'a>) -> Result<&'a str> + 'a {
+fn start_tag<'a>(open: &'a str) -> impl Fn(Span<'a>) -> Result<Field> + 'a {
     move |input: Span| {
         let (input, _) = tag(open)(input)?;
-        let (input, s) = take_until("}}")(input)?;
+        let (input, field) = delimited(space0, field, space0)(input)?;
         let (input, _) = tag("}}")(input)?;
-        Ok((input, s.trim()))
+        Ok((input, field))
     }
 }
 
-fn tag_end<'a>(name: &'a str) -> impl Fn(Span<'a>) -> Result<()> + 'a {
+fn tag_end<'a>(start_field: Field) -> impl Fn(Span<'a>) -> Result<()> + 'a {
     move |input: Span| {
         let (input, _) = tag("{{/")(input)?;
-        let (input, _) = tag(name)(input)?;
+        let (input, end_field) = delimited(space0, field, space0)(input)?;
+        if start_field != end_field {
+            return Err(Err::Error(nom::error::Error::new(input, ErrorKind::Many1)));
+        }
         let (input, _) = tag("}}")(input)?;
         Ok((input, ()))
     }
@@ -88,10 +99,28 @@ fn parse_text(s: Span) -> Result {
     Ok((input, Part::Text(text.to_string())))
 }
 
+fn field(input: Span) -> Result<Field> {
+    alt((named, index))(input)
+}
+
+fn index(input: Span) -> Result<Field> {
+    let (input, i) = nom::character::complete::u8(input)?;
+    Ok((input, Field::Index(i)))
+}
+
+fn named(input: Span) -> Result<Field> {
+    let is_begin = alt((tag("_"), nom_unicode::complete::alpha1));
+    let is_rest = many0_count(alt((tag("_"), nom_unicode::complete::alphanumeric1)));
+
+    let (input, ident) = recognize(pair(is_begin, is_rest))(input)?;
+    Ok((input, Field::Named(ident.to_string())))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    use Field::*;
     use Part::*;
 
     #[test]
@@ -101,7 +130,7 @@ mod tests {
             result,
             vec![
                 Text("<h1>".into()),
-                Variable("title".into()),
+                Variable(Named("title".into())),
                 Text("</h1>".into())
             ]
         );
@@ -124,10 +153,10 @@ mod tests {
                 Comment,
                 Text("<ul>".into()),
                 Section(
-                    "items".into(),
+                    Named("items".into()),
                     vec![
                         Text("<li>".into()),
-                        Variable("id".into()),
+                        Variable(Named("id".into())),
                         Text("</li>".into())
                     ]
                 ),
