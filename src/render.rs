@@ -321,7 +321,6 @@ impl<'a, W: Write> Visit for InvertedSection<'a, W> {
 
         if let Field::Index(i) = &self.field {
             let field = values.get(*i as usize);
-            println!("Field {:?} = {:?}", &self.field, &field);
             self.render_parts(field);
         }
     }
