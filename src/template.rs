@@ -252,4 +252,34 @@ mod tests {
         );
         assert_eq!(&s, "Products: Butter, Bread, ");
     }
+
+    #[derive(Valuable)]
+    struct ErrorMsg<'a> {
+        has_error: bool,
+        msg: &'a str,
+    }
+
+    #[test]
+    fn bool_section_true() {
+        let s = render(
+            "{{#has_error}}Error: {{msg}}.{{/has_error}}",
+            &ErrorMsg {
+                has_error: true,
+                msg: "invalid email",
+            },
+        );
+        assert_eq!(&s, "Error: invalid email.")
+    }
+
+    #[test]
+    fn bool_section_false() {
+        let s = render(
+            "{{#has_error}}Error: {{msg}}.{{/has_error}}",
+            &ErrorMsg {
+                has_error: false,
+                msg: "invalid email",
+            },
+        );
+        assert_eq!(&s, "")
+    }
 }

@@ -183,7 +183,16 @@ impl<'a, W: Write> Visit for Section<'a, W> {
                     l.visit(&mut list);
                     self.result = list.result;
                 }
-                Value::Unit => {}
+                Value::Bool(bool) if bool => {
+                    let ctx = self.context.clone();
+                    for part in self.parts.iter() {
+                        if let Err(err) = ctx.render_part(self.writer, part) {
+                            self.result = Err(err);
+                            return;
+                        }
+                    }
+                }
+                Value::Bool(_) | Value::Unit => {}
                 _ => {
                     let mut ctx = self.context.clone();
                     ctx.push(value);
