@@ -114,6 +114,11 @@ impl<'a, W: Write> Variable<'a, W> {
 
 impl<'a, W: Write> Visit for Variable<'a, W> {
     fn visit_value(&mut self, value: Value<'_>) {
+        if self.field == Field::This {
+            self.render_result = self.render_value(value);
+            return;
+        }
+
         match value {
             Value::Structable(s) => {
                 s.visit(self);

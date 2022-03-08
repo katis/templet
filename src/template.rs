@@ -349,4 +349,20 @@ mod tests {
         let s = render("Name: {{0}}, age: {{1}}", &Positional("Joe", 23));
         assert_eq!(&s, "Name: Joe, age: 23")
     }
+
+    #[derive(Valuable)]
+    struct Tags<'a> {
+        tags: &'a [&'a str],
+    }
+
+    #[test]
+    fn this_list() {
+        let s = render(
+            "Tags: {{#tags}}{{.}}, {{/tags}}",
+            &Tags {
+                tags: &["work", "buzzwords", "agile"],
+            },
+        );
+        assert_eq!(&s, "Tags: work, buzzwords, agile, ");
+    }
 }

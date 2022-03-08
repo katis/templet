@@ -27,6 +27,7 @@ pub enum Part {
 pub enum Field {
     Index(u8),
     Named(String),
+    This,
 }
 
 #[derive(Debug)]
@@ -111,12 +112,17 @@ fn parse_text(s: Span) -> Result {
 }
 
 fn field(input: Span) -> Result<Field> {
-    alt((named, index))(input)
+    alt((named, index, this))(input)
 }
 
 fn index(input: Span) -> Result<Field> {
     let (input, i) = nom::character::complete::u8(input)?;
     Ok((input, Field::Index(i)))
+}
+
+fn this(input: Span) -> Result<Field> {
+    let (input, _) = tag(".")(input)?;
+    Ok((input, Field::This))
 }
 
 fn named(input: Span) -> Result<Field> {
