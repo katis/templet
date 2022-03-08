@@ -199,41 +199,6 @@ impl<'a, W: Write> Visit for Section<'a, W> {
     }
 }
 
-struct OptionSection<'a, W> {
-    parts: &'a [Part],
-    writer: &'a mut W,
-    context: Context<'a>,
-    result: Result<(), std::fmt::Error>,
-}
-
-impl<'a, W> OptionSection<'a, W> {
-    fn new(parts: &'a [Part], writer: &'a mut W, context: Context<'a>) -> Self {
-        Self {
-            parts,
-            writer,
-            context,
-            result: Ok(()),
-        }
-    }
-}
-
-impl<'a, W: Write> Visit for OptionSection<'a, W> {
-    fn visit_value(&mut self, _value: Value<'_>) {
-        unreachable!()
-    }
-
-    fn visit_unnamed_fields(&mut self, values: &[Value<'_>]) {
-        if let Some(value) = values.get(0) {
-            let mut ctx = self.context.clone();
-            ctx.push(*value);
-
-            for part in self.parts.iter() {
-                self.result = ctx.render_part(self.writer, part);
-            }
-        }
-    }
-}
-
 struct ListSection<'a, W> {
     parts: &'a [Part],
     writer: &'a mut W,
@@ -255,6 +220,8 @@ impl<'a, W> ListSection<'a, W> {
 impl<'a, W: Write> Visit for ListSection<'a, W> {
     fn visit_value(&mut self, value: Value<'_>) {
         if self.result.is_err() {
+            return;
+        } else if let Value::Unit = value {
             return;
         }
 

@@ -165,16 +165,16 @@ mod tests {
 
     #[derive(Valuable)]
     struct Product<'a> {
-        name: &'a str,
+        product: &'a str,
         cost: Cost,
     }
 
     #[test]
     fn enum_in_section() {
         let s = render(
-            "Name: {{name}}{{#cost}}{{#Purchase}}, Price: {{price}}e{{/Purchase}}{{/cost}}",
+            "Name: {{product}}{{#cost}}{{#Purchase}}, Price: {{price}}e{{/Purchase}}{{/cost}}",
             &Product {
-                name: "Book",
+                product: "Book",
                 cost: Cost::Purchase { price: 33 },
             },
         );
@@ -183,14 +183,20 @@ mod tests {
 
     #[derive(Valuable)]
     struct User2<'a> {
+        name: Option<&'a str>,
         address: Option<Address<'a>>,
+        products: Vec<Option<Product<'a>>>,
     }
 
     #[test]
     fn optional_section_none() {
         let s = render(
             "{{#address}}Street: {{street}}{{/address}}",
-            &User2 { address: None },
+            &User2 {
+                name: None,
+                address: None,
+                products: vec![],
+            },
         );
         assert_eq!(&s, "");
     }
@@ -200,12 +206,50 @@ mod tests {
         let s = render(
             "{{#address}}Street: {{street}}{{/address}}",
             &User2 {
+                name: None,
                 address: Some(Address {
                     street: "Baker Street",
                     number: 221,
                 }),
+                products: vec![],
             },
         );
         assert_eq!(&s, "Street: Baker Street");
+    }
+
+    #[test]
+    fn optional_field() {
+        let s = render(
+            "Name: {{name}}.",
+            &User2 {
+                name: Some("Joe Mama"),
+                address: None,
+                products: vec![],
+            },
+        );
+        assert_eq!(&s, "Name: Joe Mama.");
+    }
+
+    #[test]
+    fn optional_list_items() {
+        let s = render(
+            "Products: {{#products}}{{product}}, {{/products}}",
+            &User2 {
+                name: Some("Joe Mama"),
+                address: None,
+                products: vec![
+                    Some(Product {
+                        product: "Butter",
+                        cost: Cost::Purchase { price: 300 },
+                    }),
+                    None,
+                    Some(Product {
+                        product: "Bread",
+                        cost: Cost::Purchase { price: 200 },
+                    }),
+                ],
+            },
+        );
+        assert_eq!(&s, "Products: Butter, Bread, ");
     }
 }
