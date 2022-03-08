@@ -49,7 +49,9 @@ impl<'v> Context<'v> {
                 for value in self.stack.iter().rev() {
                     let mut var = Variable::new(name.clone(), writer);
                     value.visit(&mut var);
-                    var.render_result().map(|_| ())?;
+                    if var.render_result()? {
+                        return Ok(());
+                    }
                 }
                 Ok(())
             }
