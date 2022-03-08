@@ -6,27 +6,27 @@ use crate::errors::Error;
 use crate::parse::{Field, Part};
 
 pub fn render<W: Write>(writer: &mut W, parts: &[Part], value: Value) -> Result<(), Error> {
-    let ctx = Context::new(value);
-    ctx.render_parts(writer, parts)?;
+    let rnd = Renderer::new(value);
+    rnd.render_parts(writer, parts)?;
     Ok(())
 }
 
 #[derive(Debug, Clone)]
-struct Context<'v> {
+struct Renderer<'v> {
     stack: Vec<Value<'v>>,
 }
 
-impl<'v> Context<'v> {
+impl<'v> Renderer<'v> {
     fn new(initial: Value<'v>) -> Self {
         Self {
             stack: vec![initial],
         }
     }
 
-    fn append(&self, value: Value<'v>) -> Context {
-        let mut ctx = self.clone();
-        ctx.stack.push(value);
-        ctx
+    fn append(&self, value: Value<'v>) -> Renderer {
+        let mut rnd = self.clone();
+        rnd.stack.push(value);
+        rnd
     }
 
     fn render_parts<W: Write>(&self, writer: &mut W, parts: &[Part]) -> Result<(), Error> {
@@ -163,17 +163,17 @@ struct Section<'a, W> {
     field: Field,
     parts: &'a [Part],
     writer: &'a mut W,
-    context: Context<'a>,
+    renderer: Renderer<'a>,
     result: Result<(), Error>,
 }
 
 impl<'a, W: Write> Section<'a, W> {
-    fn new(field: Field, parts: &'a [Part], writer: &'a mut W, context: Context<'a>) -> Self {
+    fn new(field: Field, parts: &'a [Part], writer: &'a mut W, renderer: Renderer<'a>) -> Self {
         Self {
             field,
             parts,
             writer,
-            context,
+            renderer,
             result: Ok(()),
         }
     }
@@ -181,17 +181,17 @@ impl<'a, W: Write> Section<'a, W> {
     fn render_value(&mut self, value: Value<'_>) {
         match value {
             Value::Listable(l) => {
-                let mut list = ListSection::new(self.parts, self.writer, self.context.clone());
+                let mut list = ListSection::new(self.parts, self.writer, self.renderer.clone());
                 l.visit(&mut list);
                 self.result = list.result;
             }
             Value::Bool(true) => {
-                self.result = self.context.render_parts(self.writer, self.parts);
+                self.result = self.renderer.render_parts(self.writer, self.parts);
             }
             Value::Bool(false) | Value::Unit => {}
             _ => {
-                let ctx = self.context.append(value);
-                self.result = ctx.render_parts(self.writer, self.parts);
+                let rnd = self.renderer.append(value);
+                self.result = rnd.render_parts(self.writer, self.parts);
             }
         }
     }
@@ -202,8 +202,8 @@ impl<'a, W: Write> Visit for Section<'a, W> {
         match (&self.field, value) {
             (_, Value::Structable(s)) => s.visit(self),
             (Field::Named(name), Value::Enumerable(e)) if name == e.variant().name() => {
-                let ctx = self.context.append(e.as_value());
-                self.result = ctx.render_parts(self.writer, self.parts);
+                let rnd = self.renderer.append(e.as_value());
+                self.result = rnd.render_parts(self.writer, self.parts);
             }
             _ => (),
         }
@@ -233,16 +233,16 @@ impl<'a, W: Write> Visit for Section<'a, W> {
 struct ListSection<'a, W> {
     parts: &'a [Part],
     writer: &'a mut W,
-    context: Context<'a>,
+    renderer: Renderer<'a>,
     result: Result<(), Error>,
 }
 
 impl<'a, W> ListSection<'a, W> {
-    fn new(parts: &'a [Part], writer: &'a mut W, context: Context<'a>) -> Self {
+    fn new(parts: &'a [Part], writer: &'a mut W, renderer: Renderer<'a>) -> Self {
         Self {
             parts,
             writer,
-            context,
+            renderer,
             result: Ok(()),
         }
     }
@@ -256,8 +256,8 @@ impl<'a, W: Write> Visit for ListSection<'a, W> {
             return;
         }
 
-        let ctx = self.context.append(value);
-        self.result = ctx.render_parts(self.writer, self.parts);
+        let rnd = self.renderer.append(value);
+        self.result = rnd.render_parts(self.writer, self.parts);
     }
 }
 
@@ -265,17 +265,17 @@ struct InvertedSection<'a, W> {
     field: Field,
     parts: &'a [Part],
     writer: &'a mut W,
-    context: Context<'a>,
+    renderer: Renderer<'a>,
     result: Result<(), Error>,
 }
 
 impl<'a, W: Write> InvertedSection<'a, W> {
-    fn new(field: Field, parts: &'a [Part], writer: &'a mut W, context: Context<'a>) -> Self {
+    fn new(field: Field, parts: &'a [Part], writer: &'a mut W, renderer: Renderer<'a>) -> Self {
         Self {
             field,
             parts,
             writer,
-            context,
+            renderer,
             result: Ok(()),
         }
     }
@@ -283,13 +283,13 @@ impl<'a, W: Write> InvertedSection<'a, W> {
     fn render_parts(&mut self, value: Option<&Value<'_>>) {
         self.result = match value {
             None | Some(Value::Bool(false) | Value::Unit) => {
-                self.context.render_parts(self.writer, self.parts)
+                self.renderer.render_parts(self.writer, self.parts)
             }
             Some(Value::Listable(l)) if (0, Some(0)) == l.size_hint() => {
-                self.context.render_parts(self.writer, self.parts)
+                self.renderer.render_parts(self.writer, self.parts)
             }
             Some(Value::Mappable(m)) if (0, Some(0)) == m.size_hint() => {
-                self.context.render_parts(self.writer, self.parts)
+                self.renderer.render_parts(self.writer, self.parts)
             }
             _ => return,
         };
