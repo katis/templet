@@ -30,15 +30,10 @@ pub enum Field {
     This,
 }
 
-#[derive(Debug)]
-pub struct TempletParser {}
-
-impl TempletParser {
-    pub fn parse(s: &str) -> Vec<Part> {
-        let span = Span::new(s);
-        let tokens = parse_parts(span);
-        tokens.map(|(_, tokens)| tokens).unwrap()
-    }
+pub fn parse(s: &str) -> Vec<Part> {
+    let span = Span::new(s);
+    let tokens = parse_parts(span);
+    tokens.map(|(_, tokens)| tokens).unwrap()
 }
 
 fn parse_parts(input: Span) -> Result<Vec<Part>> {
@@ -142,7 +137,7 @@ mod tests {
 
     #[test]
     fn simple_variable() {
-        let result = TempletParser::parse("<h1>{{title}}</h1>");
+        let result = parse("<h1>{{title}}</h1>");
         assert_eq!(
             result,
             vec![
@@ -155,7 +150,7 @@ mod tests {
 
     #[test]
     fn simple_variable_index() {
-        let result = TempletParser::parse("<h1>{{ 0 }}</h1>");
+        let result = parse("<h1>{{ 0 }}</h1>");
         assert_eq!(
             result,
             vec![
@@ -168,15 +163,13 @@ mod tests {
 
     #[test]
     fn text_wtf() {
-        let result = TempletParser::parse("{{/foobar}}");
+        let result = parse("{{/foobar}}");
         assert_eq!(result, vec![]);
     }
 
     #[test]
     fn simple_section() {
-        let result = TempletParser::parse(
-            "\\{{ Cool shit here }}<ul>{{#items}}<li>{{id}}</li>{{/items}}</ul>",
-        );
+        let result = parse("\\{{ Cool shit here }}<ul>{{#items}}<li>{{id}}</li>{{/items}}</ul>");
         assert_eq!(
             result,
             vec![
@@ -197,7 +190,7 @@ mod tests {
 
     #[test]
     fn simple_section_index() {
-        let result = TempletParser::parse("{{#0}}{{foobar}}{{/0}}");
+        let result = parse("{{#0}}{{foobar}}{{/0}}");
         assert_eq!(
             result,
             vec![Section(Index(0), vec![Variable(Named("foobar".into()))])]

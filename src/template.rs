@@ -4,7 +4,7 @@ use valuable::Valuable;
 
 use crate::{
     errors::Error,
-    parser::{Part, TempletParser},
+    parser::{parse, Part},
     render::render,
 };
 
@@ -15,8 +15,9 @@ pub struct Template {
 
 impl Template {
     pub fn parse(input: &str) -> Self {
-        let parts = TempletParser::parse(input);
-        Template { parts }
+        Template {
+            parts: parse(input),
+        }
     }
 
     pub fn render(&self, ctx: &dyn Valuable) -> Result<String, Error> {
