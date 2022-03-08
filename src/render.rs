@@ -2,13 +2,10 @@ use std::fmt::Write;
 
 use valuable::{Valuable, Value, Visit};
 
+use crate::errors::Error;
 use crate::parser::Part;
 
-pub fn render<W: Write>(
-    writer: &mut W,
-    parts: &[Part],
-    value: Value,
-) -> Result<(), std::fmt::Error> {
+pub fn render<W: Write>(writer: &mut W, parts: &[Part], value: Value) -> Result<(), Error> {
     let ctx = Context::new(value);
     ctx.render_parts(writer, parts)?;
     Ok(())
@@ -32,18 +29,14 @@ impl<'v> Context<'v> {
         ctx
     }
 
-    fn render_parts<W: Write>(
-        &self,
-        writer: &mut W,
-        parts: &[Part],
-    ) -> Result<(), std::fmt::Error> {
+    fn render_parts<W: Write>(&self, writer: &mut W, parts: &[Part]) -> Result<(), Error> {
         for part in parts.iter() {
             self.render_part(writer, part)?;
         }
         Ok(())
     }
 
-    fn render_part<W: Write>(&self, writer: &mut W, part: &Part) -> Result<(), std::fmt::Error> {
+    fn render_part<W: Write>(&self, writer: &mut W, part: &Part) -> Result<(), Error> {
         match part {
             Part::Variable(name) => {
                 for value in self.stack.iter().rev() {
@@ -72,7 +65,7 @@ impl<'v> Context<'v> {
 struct Variable<'a, W> {
     name: String,
     writer: &'a mut W,
-    render_result: Result<bool, std::fmt::Error>,
+    render_result: Result<bool, Error>,
 }
 
 impl<'a, W: Write> Variable<'a, W> {
@@ -84,11 +77,11 @@ impl<'a, W: Write> Variable<'a, W> {
         }
     }
 
-    fn render_result(&self) -> Result<bool, std::fmt::Error> {
+    fn render_result(&self) -> Result<bool, Error> {
         self.render_result
     }
 
-    fn render_value(&mut self, value: Value) -> Result<bool, std::fmt::Error> {
+    fn render_value(&mut self, value: Value) -> Result<bool, Error> {
         let result = match value {
             Value::String(v) => self.writer.write_str(v),
             Value::Char(v) => self.writer.write_char(v),
@@ -150,7 +143,7 @@ struct Section<'a, W> {
     parts: &'a [Part],
     writer: &'a mut W,
     context: Context<'a>,
-    result: Result<(), std::fmt::Error>,
+    result: Result<(), Error>,
 }
 
 impl<'a, W> Section<'a, W> {
@@ -207,7 +200,7 @@ struct ListSection<'a, W> {
     parts: &'a [Part],
     writer: &'a mut W,
     context: Context<'a>,
-    result: Result<(), std::fmt::Error>,
+    result: Result<(), Error>,
 }
 
 impl<'a, W> ListSection<'a, W> {

@@ -3,6 +3,7 @@ use std::fmt::Write;
 use valuable::Valuable;
 
 use crate::{
+    errors::Error,
     parser::{Part, TempletParser},
     render::render,
 };
@@ -18,17 +19,13 @@ impl Template {
         Template { parts }
     }
 
-    pub fn render(&self, ctx: &dyn Valuable) -> Result<String, std::fmt::Error> {
+    pub fn render(&self, ctx: &dyn Valuable) -> Result<String, Error> {
         let mut str = String::new();
         self.render_to(&mut str, ctx)?;
         Ok(str)
     }
 
-    pub fn render_to<W: Write>(
-        &self,
-        writer: &mut W,
-        ctx: &dyn Valuable,
-    ) -> Result<(), std::fmt::Error> {
+    pub fn render_to<W: Write>(&self, writer: &mut W, ctx: &dyn Valuable) -> Result<(), Error> {
         render(writer, &self.parts, ctx.as_value())
     }
 }

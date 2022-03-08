@@ -1,3 +1,4 @@
+mod errors;
 mod parser;
 mod render;
 mod template;
