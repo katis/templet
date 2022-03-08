@@ -49,10 +49,9 @@ impl<'v> Context<'v> {
                 for value in self.stack.iter().rev() {
                     let mut var = Variable::new(name.clone(), writer);
                     value.visit(&mut var);
-                    if var.render_result()? {
-                        return Ok(());
-                    }
+                    var.render_result().map(|_| ())?;
                 }
+                Ok(())
             }
             Part::Section(name, parts) => {
                 if let Some(last) = self.stack.last() {
@@ -60,13 +59,11 @@ impl<'v> Context<'v> {
                     last.visit(&mut section);
                     section.result?;
                 }
+                Ok(())
             }
-            Part::Text(text) => {
-                return writer.write_str(text.as_str());
-            }
-            Part::Comment => {}
-        };
-        Ok(())
+            Part::Text(text) => writer.write_str(text.as_str()),
+            Part::Comment => Ok(()),
+        }
     }
 }
 
