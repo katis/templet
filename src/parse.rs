@@ -1,6 +1,6 @@
 use nom::{
     branch::alt,
-    bytes::complete::{is_not, tag, take_until, take_until1},
+    bytes::complete::{escaped, is_not, tag, take_until, take_until1},
     character::complete::space0,
     combinator::{recognize, rest},
     error::ErrorKind,
@@ -20,6 +20,7 @@ pub enum Part {
     Variable(Field),
     Section(Field, Vec<Part>),
     InvertedSection(Field, Vec<Part>),
+    Include(String),
     Comment,
 }
 
@@ -41,6 +42,7 @@ fn parse_parts(input: Span) -> Result<Vec<Part>> {
         parse_comment,
         parse_section,
         parse_inverted_section,
+        parse_include,
         parse_variable,
         parse_text,
     )))(input)?;
@@ -75,6 +77,21 @@ fn parse_inverted_section(input: Span) -> Result {
     let (input, _) = tag_end(field.clone())(input)?;
 
     Ok((input, Part::InvertedSection(field, contents)))
+}
+
+fn parse_include(input: Span) -> Result {
+    let (input, _) = tag("{{>")(input)?;
+    let (input, path) = delimited(space0, file_path, space0)(input)?;
+    let (input, _) = tag("}}")(input)?;
+    Ok((input, Part::Include(path.to_string())))
+}
+
+fn file_path(input: Span) -> Result<Span> {
+    delimited(
+        tag("\""),
+        escaped(is_not("\"\\"), '\\', tag("\"")),
+        tag("\""),
+    )(input)
 }
 
 fn start_tag<'a>(open: &'a str) -> impl Fn(Span<'a>) -> Result<Field> + 'a {

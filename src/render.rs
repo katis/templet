@@ -1,24 +1,22 @@
+use std::collections::HashMap;
 use std::io::Write;
 
 use valuable::{Valuable, Value, Visit};
 
 use crate::errors::Error;
 use crate::parse::{Field, Part};
+use crate::Template;
 
-pub fn render<W: Write>(writer: &mut W, parts: &[Part], value: Value) -> Result<(), Error> {
-    let rnd = Renderer::new(value);
-    rnd.render_parts(writer, parts)?;
-    Ok(())
-}
-
-#[derive(Debug, Clone)]
-struct Renderer<'v> {
+#[derive(Clone)]
+pub(crate) struct Renderer<'v> {
+    templates: &'v HashMap<String, Template>,
     stack: Vec<Value<'v>>,
 }
 
 impl<'v> Renderer<'v> {
-    fn new(initial: Value<'v>) -> Self {
+    pub fn new(templates: &'v HashMap<String, Template>, initial: Value<'v>) -> Self {
         Self {
+            templates,
             stack: vec![initial],
         }
     }
@@ -27,6 +25,13 @@ impl<'v> Renderer<'v> {
         let mut rnd = self.clone();
         rnd.stack.push(value);
         rnd
+    }
+
+    pub fn render<W: Write>(&self, template_name: &str, writer: &mut W) -> Result<(), Error> {
+        if let Some(tpl) = self.templates.get(template_name) {
+            self.render_parts(writer, tpl.parts())?;
+        }
+        Ok(())
     }
 
     fn render_parts<W: Write>(&self, writer: &mut W, parts: &[Part]) -> Result<(), Error> {
@@ -38,6 +43,7 @@ impl<'v> Renderer<'v> {
 
     fn render_part<W: Write>(&self, writer: &mut W, part: &Part) -> Result<(), Error> {
         match part {
+            Part::Text(text) => writer.write_all(text.as_bytes()),
             Part::Variable(name) => {
                 for value in self.stack.iter().rev() {
                     let mut var = Variable::new(name.clone(), writer);
@@ -65,7 +71,12 @@ impl<'v> Renderer<'v> {
                 }
                 Ok(())
             }
-            Part::Text(text) => writer.write_all(text.as_bytes()),
+            Part::Include(path) => {
+                if let Some(template) = self.templates.get(path) {
+                    self.render_parts(writer, template.parts())?;
+                }
+                Ok(())
+            }
             Part::Comment => Ok(()),
         }
     }

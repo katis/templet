@@ -1,14 +1,5 @@
-use std::io::Write;
+use crate::parse::{parse, Part};
 
-use valuable::Valuable;
-
-use crate::{
-    errors::Error,
-    parse::{parse, Part},
-    render::render,
-};
-
-#[derive(Clone)]
 pub struct Template {
     parts: Vec<Part>,
 }
@@ -20,19 +11,19 @@ impl Template {
         }
     }
 
-    pub fn render(&self, ctx: &dyn Valuable) -> Result<String, Error> {
-        let mut buf = Vec::new();
-        self.render_to(&mut buf, ctx)?;
-        Ok(String::from_utf8(buf).unwrap())
-    }
-
-    pub fn render_to<W: Write>(&self, writer: &mut W, ctx: &dyn Valuable) -> Result<(), Error> {
-        render(writer, &self.parts, ctx.as_value())
+    pub(crate) fn parts(&self) -> &[Part] {
+        &self.parts
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+
+    use valuable::Valuable;
+
+    use crate::templates::Templates;
+
     use super::*;
 
     #[derive(Valuable)]
@@ -55,7 +46,10 @@ mod tests {
 
     fn render(source: &str, ctx: &dyn Valuable) -> String {
         let tpl = Template::parse(source);
-        tpl.render(ctx).unwrap()
+        let mut map = HashMap::new();
+        map.insert("template".into(), tpl);
+        let templates = Templates::new(map);
+        templates.render_to_string("template", ctx).unwrap()
     }
 
     #[test]
