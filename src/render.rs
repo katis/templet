@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::io::Write;
 
+use v_htmlescape::escape;
 use valuable::{Valuable, Value, Visit};
 
 use crate::errors::Error;
@@ -98,27 +99,39 @@ impl<'a, W: Write> Variable<'a, W> {
     }
 
     fn render_value(&mut self, value: Value) -> Result<bool, Error> {
+        let mut buf = Vec::new();
+
         let result = match value {
-            Value::String(v) => write!(self.writer, "{}", v),
-            Value::Char(v) => write!(self.writer, "{}", v),
-            Value::Bool(v) => write!(self.writer, "{}", v),
-            Value::F32(v) => write!(self.writer, "{}", v),
-            Value::F64(v) => write!(self.writer, "{}", v),
-            Value::I8(v) => write!(self.writer, "{}", v),
-            Value::I16(v) => write!(self.writer, "{}", v),
-            Value::I32(v) => write!(self.writer, "{}", v),
-            Value::I64(v) => write!(self.writer, "{}", v),
-            Value::I128(v) => write!(self.writer, "{}", v),
-            Value::Isize(v) => write!(self.writer, "{}", v),
-            Value::U8(v) => write!(self.writer, "{}", v),
-            Value::U16(v) => write!(self.writer, "{}", v),
-            Value::U32(v) => write!(self.writer, "{}", v),
-            Value::U64(v) => write!(self.writer, "{}", v),
-            Value::U128(v) => write!(self.writer, "{}", v),
-            Value::Usize(v) => write!(self.writer, "{}", v),
-            Value::Path(v) => write!(self.writer, "{}", v.display()),
+            Value::String(v) => {
+                let esc = escape(v);
+                write!(self.writer, "{}", esc)?;
+                return Ok(true);
+            }
+            Value::Char(v) => write!(&mut buf, "{}", v),
+            Value::Bool(v) => write!(&mut buf, "{}", v),
+            Value::F32(v) => write!(&mut buf, "{}", v),
+            Value::F64(v) => write!(&mut buf, "{}", v),
+            Value::I8(v) => write!(&mut buf, "{}", v),
+            Value::I16(v) => write!(&mut buf, "{}", v),
+            Value::I32(v) => write!(&mut buf, "{}", v),
+            Value::I64(v) => write!(&mut buf, "{}", v),
+            Value::I128(v) => write!(&mut buf, "{}", v),
+            Value::Isize(v) => write!(&mut buf, "{}", v),
+            Value::U8(v) => write!(&mut buf, "{}", v),
+            Value::U16(v) => write!(&mut buf, "{}", v),
+            Value::U32(v) => write!(&mut buf, "{}", v),
+            Value::U64(v) => write!(&mut buf, "{}", v),
+            Value::U128(v) => write!(&mut buf, "{}", v),
+            Value::Usize(v) => write!(&mut buf, "{}", v),
+            Value::Path(v) => write!(&mut buf, "{}", v.display()),
             _ => return Ok(false),
         };
+        if !buf.is_empty() {
+            if let Ok(str) = String::from_utf8(buf) {
+                let esc = escape(&str);
+                write!(self.writer, "{}", esc)?;
+            }
+        }
         result.map(|_| true)
     }
 }

@@ -53,6 +53,12 @@ mod tests {
     }
 
     #[test]
+    fn escapes_variable() {
+        let s = render("{{.}}", &"foo > \"12\"");
+        assert_eq!(&s, "foo &gt; &quot;12&quot;");
+    }
+
+    #[test]
     fn variable() {
         let s = render(
             "{{street}}",
