@@ -679,7 +679,6 @@ name = "templet"
 version = "0.1.0"
 dependencies = [
  "criterion",
- "fnv",
  "nom",
  "nom-unicode",
  "nom_locate",
