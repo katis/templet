@@ -1,6 +1,8 @@
+use std::collections::HashMap;
+
 use criterion::{criterion_group, criterion_main, Criterion};
 use ramhorns::Content;
-use templet::Template;
+use templet::{Template, Templates};
 use valuable::Valuable;
 
 #[derive(Valuable, Content)]
@@ -77,6 +79,10 @@ pub fn criterion_benchmark(c: &mut Criterion) {
 
     c.bench_function("render", |b| {
         let t = Template::parse(PAGE);
+        let mut map = HashMap::new();
+        map.insert("template".to_owned(), t);
+        let templates = Templates::new(map);
+
         let mut buf = Vec::new();
         let ctx = &Page {
             title: "Weird store",
@@ -109,7 +115,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         };
 
         b.iter(|| {
-            t.render_to(&mut buf, &ctx).unwrap();
+            templates.render("template", &mut buf, &ctx).unwrap();
             buf.clear();
         })
     });
