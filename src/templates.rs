@@ -30,3 +30,50 @@ impl Templates {
         Ok(String::from_utf8(buf).unwrap())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use valuable::Valuable;
+
+    #[derive(Valuable)]
+    struct Page<'a> {
+        title: &'a str,
+        items: &'a [Item<'a>],
+    }
+
+    #[derive(Valuable)]
+    struct Item<'a> {
+        name: &'a str,
+    }
+
+    #[test]
+    fn partials() {
+        let mut map = HashMap::new();
+        map.insert(
+            "main".to_string(),
+            Template::parse(r#"{{>"header"}}<ul>{{#items}}{{> "item"}}{{/items}}</ul>"#),
+        );
+        map.insert(
+            "header".to_string(),
+            Template::parse(r#"<h1>{{title}}</h1>"#),
+        );
+        map.insert("item".to_string(), Template::parse(r#"<li>{{name}}</li>"#));
+
+        let templates = Templates::new(map);
+        let str = templates
+            .render_to_string(
+                "main",
+                &Page {
+                    title: "Products",
+                    items: &[Item { name: "Bread" }, Item { name: "Milk" }],
+                },
+            )
+            .unwrap();
+        assert_eq!(
+            &str,
+            "<h1>Products</h1><ul><li>Bread</li><li>Milk</li></ul>"
+        );
+    }
+}
