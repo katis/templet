@@ -213,4 +213,15 @@ mod tests {
             vec![Section(Index(0), vec![Variable(Named("foobar".into()))])]
         );
     }
+
+    #[test]
+    fn simple_include() {
+        let result = parse(r#"{{>  "/users/jane doe/templates/index.\"temp\".html" }}"#);
+        assert_eq!(
+            result,
+            vec![Include(
+                r#"/users/jane doe/templates/index.\"temp\".html"#.into()
+            )]
+        );
+    }
 }
