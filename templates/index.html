@@ -1,0 +1,13 @@
+<!DOCTYPE html>
+<html>
+  {{> "partials/header.html"}}
+  <body>
+    <h1>{{title}}</h1>
+    <ul>
+      {{#items}}
+      <li>{{name}}</li>
+      {{/items}}
+    </ul>
+    {{> "partials/footer.html"}}
+  </body>
+</html>

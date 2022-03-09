@@ -10,8 +10,10 @@ fnv = "1.0.7"
 nom = "7.1.0"
 nom-unicode = "0.3.0"
 nom_locate = "4.0.0"
+thiserror = "1.0.30"
 v_htmlescape = "0.14.1"
 valuable = { version = "0.1.0", features = ["derive"] }
+walkdir = "2.3.2"
 
 [dev-dependencies]
 criterion = "0.3.5"
