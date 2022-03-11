@@ -73,7 +73,7 @@ impl<'v> Renderer<'v> {
                 Ok(())
             }
             Part::Include(path) => {
-                if let Some(template) = self.templates.get(path) {
+                if let Some(template) = self.templates.get(*path) {
                     self.render_parts(writer, template.parts())?;
                 }
                 Ok(())
@@ -84,13 +84,13 @@ impl<'v> Renderer<'v> {
 }
 
 struct Variable<'a, W> {
-    field: Field,
+    field: Field<'a>,
     writer: &'a mut W,
     render_result: Result<bool, Error>,
 }
 
 impl<'a, W: Write> Variable<'a, W> {
-    fn new(field: Field, writer: &'a mut W) -> Self {
+    fn new(field: Field<'a>, writer: &'a mut W) -> Self {
         Self {
             field,
             writer,
@@ -167,7 +167,7 @@ impl<'a, W: Write> Visit for Variable<'a, W> {
 
     fn visit_entry(&mut self, key: Value<'_>, value: Value<'_>) {
         match (&self.field, key) {
-            (Field::Named(name), Value::String(key)) if name == key => {
+            (Field::Named(name), Value::String(key)) if *name == key => {
                 self.render_result = self.render_value(value);
             }
             _ => {}
@@ -184,15 +184,15 @@ impl<'a, W: Write> Visit for Variable<'a, W> {
 }
 
 struct Section<'a, W> {
-    field: Field,
-    parts: &'a [Part],
+    field: Field<'a>,
+    parts: &'a [Part<'a>],
     writer: &'a mut W,
     renderer: Renderer<'a>,
     result: Result<(), Error>,
 }
 
 impl<'a, W: Write> Section<'a, W> {
-    fn new(field: Field, parts: &'a [Part], writer: &'a mut W, renderer: Renderer<'a>) -> Self {
+    fn new(field: Field<'a>, parts: &'a [Part], writer: &'a mut W, renderer: Renderer<'a>) -> Self {
         Self {
             field,
             parts,
@@ -225,7 +225,7 @@ impl<'a, W: Write> Visit for Section<'a, W> {
     fn visit_value(&mut self, value: Value<'_>) {
         match (&self.field, value) {
             (_, Value::Structable(s)) => s.visit(self),
-            (Field::Named(name), Value::Enumerable(e)) if name == e.variant().name() => {
+            (Field::Named(name), Value::Enumerable(e)) if *name == e.variant().name() => {
                 let rnd = self.renderer.append(e.as_value());
                 self.result = rnd.render_parts(self.writer, self.parts);
             }
@@ -255,7 +255,7 @@ impl<'a, W: Write> Visit for Section<'a, W> {
 }
 
 struct ListSection<'a, W> {
-    parts: &'a [Part],
+    parts: &'a [Part<'a>],
     writer: &'a mut W,
     renderer: Renderer<'a>,
     result: Result<(), Error>,
@@ -286,15 +286,15 @@ impl<'a, W: Write> Visit for ListSection<'a, W> {
 }
 
 struct InvertedSection<'a, W> {
-    field: Field,
-    parts: &'a [Part],
+    field: Field<'a>,
+    parts: &'a [Part<'a>],
     writer: &'a mut W,
     renderer: Renderer<'a>,
     result: Result<(), Error>,
 }
 
 impl<'a, W: Write> InvertedSection<'a, W> {
-    fn new(field: Field, parts: &'a [Part], writer: &'a mut W, renderer: Renderer<'a>) -> Self {
+    fn new(field: Field<'a>, parts: &'a [Part], writer: &'a mut W, renderer: Renderer<'a>) -> Self {
         Self {
             field,
             parts,

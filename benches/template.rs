@@ -93,7 +93,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         let mut template = None;
 
         b.iter(|| {
-            template = Some(Template::parse(PAGE));
+            template = Some(Template::parse(PAGE.to_string()));
         });
     });
 
@@ -101,7 +101,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         let mut template = None;
 
         b.iter(|| {
-            template = ramhorns::Template::new(PAGE).ok();
+            template = ramhorns::Template::new(PAGE.to_string()).ok();
         });
     });
 
@@ -109,12 +109,12 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         let mut template = None;
 
         b.iter(|| {
-            template = Some(handlebars::Template::compile(PAGE_HANDLEBARS).unwrap());
+            template = Some(handlebars::Template::compile(&PAGE_HANDLEBARS.to_string()).unwrap());
         });
     });
 
     c.bench_function("render", |b| {
-        let t = Template::parse(PAGE);
+        let t = Template::parse(PAGE.to_string());
         let mut map = HashMap::new();
         map.insert("template".to_owned(), t);
         let templates = Templates::new(map);

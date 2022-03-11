@@ -49,7 +49,7 @@ impl Templates {
             {
                 let file = fs::read_to_string(entry.path())?;
                 let path = entry.path().strip_prefix(dir_path)?.to_string_lossy();
-                let template = Template::parse(&file);
+                let template = Template::parse(file);
                 templates.insert(path.into_owned(), template);
             }
         }
@@ -90,13 +90,16 @@ mod tests {
         let mut map = HashMap::new();
         map.insert(
             "main".to_string(),
-            Template::parse(r#"{{>"header"}}<ul>{{#items}}{{> "item"}}{{/items}}</ul>"#),
+            Template::parse(r#"{{>"header"}}<ul>{{#items}}{{> "item"}}{{/items}}</ul>"#.into()),
         );
         map.insert(
             "header".to_string(),
-            Template::parse(r#"<h1>{{title}}</h1>"#),
+            Template::parse(r#"<h1>{{title}}</h1>"#.into()),
         );
-        map.insert("item".to_string(), Template::parse(r#"<li>{{name}}</li>"#));
+        map.insert(
+            "item".to_string(),
+            Template::parse(r#"<li>{{name}}</li>"#.into()),
+        );
 
         let templates = Templates::new(map);
         let str = templates

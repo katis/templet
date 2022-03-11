@@ -12,22 +12,22 @@ use nom_locate::LocatedSpan;
 
 type Span<'a> = LocatedSpan<&'a str>;
 
-type Result<'a, T = Part> = IResult<Span<'a>, T>;
+type Result<'a, T = Part<'a>> = IResult<Span<'a>, T>;
 
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum Part {
-    Text(String),
-    Variable(Field),
-    Section(Field, Vec<Part>),
-    InvertedSection(Field, Vec<Part>),
-    Include(String),
+#[derive(Debug, Eq, PartialEq)]
+pub enum Part<'a> {
+    Text(&'a str),
+    Variable(Field<'a>),
+    Section(Field<'a>, Vec<Part<'a>>),
+    InvertedSection(Field<'a>, Vec<Part<'a>>),
+    Include(&'a str),
     Comment,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Field {
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Field<'a> {
     Index(u8),
-    Named(String),
+    Named(&'a str),
     This,
 }
 
@@ -62,28 +62,36 @@ fn parse_variable(input: Span) -> Result {
 }
 
 fn parse_section(input: Span) -> Result {
-    let (input, field) = start_tag("{{#")(input)?;
+    let (input, start_field) = start_tag("{{#")(input)?;
 
     let (input, contents) = parse_parts(input)?;
-    let (input, _) = tag_end(field.clone())(input)?;
+    let (input, end_field) = tag_end(input)?;
 
-    Ok((input, Part::Section(field, contents)))
+    if start_field != end_field {
+        return Err(Err::Error(nom::error::Error::new(input, ErrorKind::Many1)));
+    }
+
+    Ok((input, Part::Section(start_field, contents)))
 }
 
 fn parse_inverted_section(input: Span) -> Result {
-    let (input, field) = start_tag("{{^")(input)?;
+    let (input, start_field) = start_tag("{{^")(input)?;
 
     let (input, contents) = parse_parts(input)?;
-    let (input, _) = tag_end(field.clone())(input)?;
+    let (input, end_field) = tag_end(input)?;
 
-    Ok((input, Part::InvertedSection(field, contents)))
+    if start_field != end_field {
+        return Err(Err::Error(nom::error::Error::new(input, ErrorKind::Many1)));
+    }
+
+    Ok((input, Part::InvertedSection(start_field, contents)))
 }
 
 fn parse_include(input: Span) -> Result {
     let (input, _) = tag("{{>")(input)?;
     let (input, path) = delimited(space0, file_path, space0)(input)?;
     let (input, _) = tag("}}")(input)?;
-    Ok((input, Part::Include(path.to_string())))
+    Ok((input, Part::Include(&path)))
 }
 
 fn file_path(input: Span) -> Result<Span> {
@@ -103,16 +111,11 @@ fn start_tag<'a>(open: &'a str) -> impl Fn(Span<'a>) -> Result<Field> + 'a {
     }
 }
 
-fn tag_end<'a>(start_field: Field) -> impl Fn(Span<'a>) -> Result<()> + 'a {
-    move |input: Span| {
-        let (input, _) = tag("{{/")(input)?;
-        let (input, end_field) = delimited(space0, field, space0)(input)?;
-        if start_field != end_field {
-            return Err(Err::Error(nom::error::Error::new(input, ErrorKind::Many1)));
-        }
-        let (input, _) = tag("}}")(input)?;
-        Ok((input, ()))
-    }
+fn tag_end<'a>(input: Span<'a>) -> Result<Field<'a>> {
+    let (input, _) = tag("{{/")(input)?;
+    let (input, end_field) = delimited(space0, field, space0)(input)?;
+    let (input, _) = tag("}}")(input)?;
+    Ok((input, end_field))
 }
 
 fn parse_text(s: Span) -> Result {
@@ -120,7 +123,7 @@ fn parse_text(s: Span) -> Result {
     if text.is_empty() {
         return Err(Err::Error(nom::error::Error::new(input, ErrorKind::Eof)));
     }
-    Ok((input, Part::Text(text.to_string())))
+    Ok((input, Part::Text(&text)))
 }
 
 fn field(input: Span) -> Result<Field> {
@@ -142,7 +145,7 @@ fn named(input: Span) -> Result<Field> {
     let is_rest = many0_count(alt((tag("_"), nom_unicode::complete::alphanumeric1)));
 
     let (input, ident) = recognize(pair(is_begin, is_rest))(input)?;
-    Ok((input, Field::Named(ident.to_string())))
+    Ok((input, Field::Named(&ident)))
 }
 
 #[cfg(test)]
@@ -157,11 +160,7 @@ mod tests {
         let result = parse("<h1>{{title}}</h1>");
         assert_eq!(
             result,
-            vec![
-                Text("<h1>".into()),
-                Variable(Named("title".into())),
-                Text("</h1>".into())
-            ]
+            vec![Text("<h1>"), Variable(Named("title")), Text("</h1>")]
         );
     }
 
@@ -170,11 +169,7 @@ mod tests {
         let result = parse("<h1>{{ 0 }}</h1>");
         assert_eq!(
             result,
-            vec![
-                Text("<h1>".into()),
-                Variable(Index(0)),
-                Text("</h1>".into())
-            ]
+            vec![Text("<h1>"), Variable(Index(0)), Text("</h1>")]
         );
     }
 
@@ -191,16 +186,12 @@ mod tests {
             result,
             vec![
                 Comment,
-                Text("<ul>".into()),
+                Text("<ul>"),
                 Section(
-                    Named("items".into()),
-                    vec![
-                        Text("<li>".into()),
-                        Variable(Named("id".into())),
-                        Text("</li>".into())
-                    ]
+                    Named("items"),
+                    vec![Text("<li>"), Variable(Named("id")), Text("</li>")]
                 ),
-                Text("</ul>".into())
+                Text("</ul>")
             ]
         );
     }
@@ -210,7 +201,7 @@ mod tests {
         let result = parse("{{#0}}{{foobar}}{{/0}}");
         assert_eq!(
             result,
-            vec![Section(Index(0), vec![Variable(Named("foobar".into()))])]
+            vec![Section(Index(0), vec![Variable(Named("foobar"))])]
         );
     }
 
