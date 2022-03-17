@@ -45,9 +45,9 @@ impl<'v> Renderer<'v> {
     fn render_part<W: Write>(&self, writer: &mut W, part: &Part) -> Result<(), Error> {
         match part {
             Part::Text(text) => writer.write_all(text.as_bytes()),
-            Part::Variable(name) => {
+            Part::Variable(path) => {
                 for value in self.stack.iter().rev() {
-                    let mut var = Variable::new(name.clone(), writer);
+                    let mut var = Variable::new(path.as_slice(), writer);
                     value.visit(&mut var);
                     if var.render_result? {
                         return Ok(());
@@ -55,18 +55,18 @@ impl<'v> Renderer<'v> {
                 }
                 Ok(())
             }
-            Part::Section(name, parts) => {
+            Part::Section(path, parts) => {
                 if let Some(last) = self.stack.last() {
-                    let mut section = Section::new(name.clone(), parts, writer, self.clone());
+                    let mut section = Section::new(path.as_slice(), parts, writer, self.clone());
                     last.visit(&mut section);
                     section.result?;
                 }
                 Ok(())
             }
-            Part::InvertedSection(name, parts) => {
+            Part::InvertedSection(path, parts) => {
                 if let Some(last) = self.stack.last() {
                     let mut section =
-                        InvertedSection::new(name.clone(), parts, writer, self.clone());
+                        InvertedSection::new(path.as_slice(), parts, writer, self.clone());
                     last.visit(&mut section);
                     section.result?;
                 }
@@ -84,15 +84,15 @@ impl<'v> Renderer<'v> {
 }
 
 struct Variable<'a, W> {
-    field: Field<'a>,
+    path: &'a [Field<'a>],
     writer: &'a mut W,
     render_result: Result<bool, Error>,
 }
 
 impl<'a, W: Write> Variable<'a, W> {
-    fn new(field: Field<'a>, writer: &'a mut W) -> Self {
+    fn new(path: &'a [Field<'a>], writer: &'a mut W) -> Self {
         Self {
-            field,
+            path,
             writer,
             render_result: Ok(false),
         }
@@ -134,11 +134,25 @@ impl<'a, W: Write> Variable<'a, W> {
         }
         result.map(|_| true)
     }
+
+    fn handle_value(&mut self, value: Value) {
+        match self.path {
+            [_] => {
+                self.render_result = self.render_value(value);
+            }
+            [_, path @ ..] => {
+                let mut variable = Variable::new(path, self.writer);
+                value.visit(&mut variable);
+                self.render_result = variable.render_result;
+            }
+            _ => {}
+        }
+    }
 }
 
 impl<'a, W: Write> Visit for Variable<'a, W> {
     fn visit_value(&mut self, value: Value<'_>) {
-        if self.field == Field::This {
+        if let &[Field::This] = self.path {
             self.render_result = self.render_value(value);
             return;
         }
@@ -158,33 +172,33 @@ impl<'a, W: Write> Visit for Variable<'a, W> {
     }
 
     fn visit_named_fields(&mut self, named_values: &valuable::NamedValues<'_>) {
-        if let Field::Named(name) = &self.field {
+        if let Field::Named(name) = &self.path[0] {
             if let Some(value) = named_values.get_by_name(&name) {
-                self.render_result = self.render_value(*value);
+                self.handle_value(*value);
             }
         }
     }
 
     fn visit_entry(&mut self, key: Value<'_>, value: Value<'_>) {
-        match (&self.field, key) {
+        match (&self.path[0], key) {
             (Field::Named(name), Value::String(key)) if *name == key => {
-                self.render_result = self.render_value(value);
+                self.handle_value(value);
             }
             _ => {}
         }
     }
 
     fn visit_unnamed_fields(&mut self, values: &[Value<'_>]) {
-        if let Field::Index(i) = &self.field {
+        if let Field::Index(i) = &self.path[0] {
             if let Some(&value) = values.get(*i as usize) {
-                self.render_result = self.render_value(value);
+                self.handle_value(value);
             }
         }
     }
 }
 
 struct Section<'a, W> {
-    field: Field<'a>,
+    path: &'a [Field<'a>],
     parts: &'a [Part<'a>],
     writer: &'a mut W,
     renderer: Renderer<'a>,
@@ -192,9 +206,14 @@ struct Section<'a, W> {
 }
 
 impl<'a, W: Write> Section<'a, W> {
-    fn new(field: Field<'a>, parts: &'a [Part], writer: &'a mut W, renderer: Renderer<'a>) -> Self {
+    fn new(
+        path: &'a [Field<'a>],
+        parts: &'a [Part],
+        writer: &'a mut W,
+        renderer: Renderer<'a>,
+    ) -> Self {
         Self {
-            field,
+            path,
             parts,
             writer,
             renderer,
@@ -219,11 +238,24 @@ impl<'a, W: Write> Section<'a, W> {
             }
         }
     }
+
+    fn handle_value(&mut self, value: Value<'_>) {
+        match self.path {
+            [_] => self.render_value(value),
+            [_, path @ ..] => {
+                let renderer = self.renderer.append(value);
+                let mut section = Section::new(path, self.parts, self.writer, renderer);
+                value.visit(&mut section);
+                self.result = section.result;
+            }
+            [] => {}
+        }
+    }
 }
 
 impl<'a, W: Write> Visit for Section<'a, W> {
     fn visit_value(&mut self, value: Value<'_>) {
-        match (&self.field, value) {
+        match (&self.path[0], value) {
             (_, Value::Structable(s)) => s.visit(self),
             (Field::Named(name), Value::Enumerable(e)) if *name == e.variant().name() => {
                 let rnd = self.renderer.append(e.as_value());
@@ -238,17 +270,17 @@ impl<'a, W: Write> Visit for Section<'a, W> {
             return;
         }
 
-        if let Field::Named(name) = &self.field {
+        if let Field::Named(name) = &self.path[0] {
             if let Some(&value) = named_values.get_by_name(&name) {
-                self.render_value(value);
+                self.handle_value(value);
             }
         }
     }
 
     fn visit_unnamed_fields(&mut self, values: &[Value<'_>]) {
-        if let Field::Index(i) = &self.field {
+        if let Field::Index(i) = &self.path[0] {
             if let Some(&value) = values.get(*i as usize) {
-                self.render_value(value);
+                self.handle_value(value);
             }
         }
     }
@@ -286,7 +318,7 @@ impl<'a, W: Write> Visit for ListSection<'a, W> {
 }
 
 struct InvertedSection<'a, W> {
-    field: Field<'a>,
+    path: &'a [Field<'a>],
     parts: &'a [Part<'a>],
     writer: &'a mut W,
     renderer: Renderer<'a>,
@@ -294,9 +326,14 @@ struct InvertedSection<'a, W> {
 }
 
 impl<'a, W: Write> InvertedSection<'a, W> {
-    fn new(field: Field<'a>, parts: &'a [Part], writer: &'a mut W, renderer: Renderer<'a>) -> Self {
+    fn new(
+        path: &'a [Field<'a>],
+        parts: &'a [Part],
+        writer: &'a mut W,
+        renderer: Renderer<'a>,
+    ) -> Self {
         Self {
-            field,
+            path,
             parts,
             writer,
             renderer,
@@ -318,6 +355,20 @@ impl<'a, W: Write> InvertedSection<'a, W> {
             _ => return,
         };
     }
+
+    fn handle_value(&mut self, value: Option<&Value<'_>>) {
+        match (self.path, value) {
+            ([_], value) => self.render_parts(value),
+            ([_, path @ ..], Some(value)) => {
+                let renderer = self.renderer.append(*value);
+                let mut section = Section::new(path, self.parts, self.writer, renderer);
+                value.visit(&mut section);
+                self.result = section.result;
+            }
+            (_, None) => {}
+            _ => unreachable!("path must never be empty"),
+        }
+    }
 }
 
 impl<'a, W: Write> Visit for InvertedSection<'a, W> {
@@ -332,9 +383,9 @@ impl<'a, W: Write> Visit for InvertedSection<'a, W> {
             return;
         }
 
-        if let Field::Named(name) = &self.field {
-            let field = named_values.get_by_name(&name);
-            self.render_parts(field);
+        if let Field::Named(name) = &self.path[0] {
+            let value = named_values.get_by_name(&name);
+            self.handle_value(value);
         }
     }
 
@@ -343,9 +394,9 @@ impl<'a, W: Write> Visit for InvertedSection<'a, W> {
             return;
         }
 
-        if let Field::Index(i) = &self.field {
-            let field = values.get(*i as usize);
-            self.render_parts(field);
+        if let Field::Index(i) = &self.path[0] {
+            let value = values.get(*i as usize);
+            self.handle_value(value);
         }
     }
 }

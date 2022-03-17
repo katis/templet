@@ -4,7 +4,7 @@ use nom::{
     character::complete::space0,
     combinator::{recognize, rest},
     error::ErrorKind,
-    multi::{many0, many0_count},
+    multi::{many0, many0_count, separated_list1},
     sequence::{delimited, pair},
     Err, IResult,
 };
@@ -17,9 +17,9 @@ type Result<'a, T = Part<'a>> = IResult<Span<'a>, T>;
 #[derive(Debug, Eq, PartialEq)]
 pub enum Part<'a> {
     Text(&'a str),
-    Variable(Field<'a>),
-    Section(Field<'a>, Vec<Part<'a>>),
-    InvertedSection(Field<'a>, Vec<Part<'a>>),
+    Variable(Vec<Field<'a>>),
+    Section(Vec<Field<'a>>, Vec<Part<'a>>),
+    InvertedSection(Vec<Field<'a>>, Vec<Part<'a>>),
     Include(&'a str),
     Comment,
 }
@@ -102,7 +102,7 @@ fn file_path(input: Span) -> Result<Span> {
     )(input)
 }
 
-fn start_tag<'a>(open: &'a str) -> impl Fn(Span<'a>) -> Result<Field> + 'a {
+fn start_tag<'a>(open: &'a str) -> impl Fn(Span<'a>) -> Result<Vec<Field>> + 'a {
     move |input: Span| {
         let (input, _) = tag(open)(input)?;
         let (input, field) = delimited(space0, field, space0)(input)?;
@@ -111,7 +111,7 @@ fn start_tag<'a>(open: &'a str) -> impl Fn(Span<'a>) -> Result<Field> + 'a {
     }
 }
 
-fn tag_end<'a>(input: Span<'a>) -> Result<Field<'a>> {
+fn tag_end<'a>(input: Span<'a>) -> Result<Vec<Field<'a>>> {
     let (input, _) = tag("{{/")(input)?;
     let (input, end_field) = delimited(space0, field, space0)(input)?;
     let (input, _) = tag("}}")(input)?;
@@ -126,8 +126,12 @@ fn parse_text(s: Span) -> Result {
     Ok((input, Part::Text(&text)))
 }
 
-fn field(input: Span) -> Result<Field> {
-    alt((named, index, this))(input)
+fn path(input: Span) -> Result<Vec<Field>> {
+    separated_list1(tag("."), alt((named, index)))(input)
+}
+
+fn field(input: Span) -> Result<Vec<Field>> {
+    alt((path, this))(input)
 }
 
 fn index(input: Span) -> Result<Field> {
@@ -135,9 +139,9 @@ fn index(input: Span) -> Result<Field> {
     Ok((input, Field::Index(i)))
 }
 
-fn this(input: Span) -> Result<Field> {
+fn this(input: Span) -> Result<Vec<Field>> {
     let (input, _) = tag(".")(input)?;
-    Ok((input, Field::This))
+    Ok((input, vec![Field::This]))
 }
 
 fn named(input: Span) -> Result<Field> {
@@ -160,7 +164,7 @@ mod tests {
         let result = parse("<h1>{{title}}</h1>");
         assert_eq!(
             result,
-            vec![Text("<h1>"), Variable(Named("title")), Text("</h1>")]
+            vec![Text("<h1>"), Variable(vec![Named("title")]), Text("</h1>")]
         );
     }
 
@@ -169,7 +173,7 @@ mod tests {
         let result = parse("<h1>{{ 0 }}</h1>");
         assert_eq!(
             result,
-            vec![Text("<h1>"), Variable(Index(0)), Text("</h1>")]
+            vec![Text("<h1>"), Variable(vec![Index(0)]), Text("</h1>")]
         );
     }
 
@@ -188,8 +192,8 @@ mod tests {
                 Comment,
                 Text("<ul>"),
                 Section(
-                    Named("items"),
-                    vec![Text("<li>"), Variable(Named("id")), Text("</li>")]
+                    vec![Named("items")],
+                    vec![Text("<li>"), Variable(vec![Named("id")]), Text("</li>")]
                 ),
                 Text("</ul>")
             ]
@@ -201,7 +205,10 @@ mod tests {
         let result = parse("{{#0}}{{foobar}}{{/0}}");
         assert_eq!(
             result,
-            vec![Section(Index(0), vec![Variable(Named("foobar"))])]
+            vec![Section(
+                vec![Index(0)],
+                vec![Variable(vec![Named("foobar")])]
+            )]
         );
     }
 
@@ -210,9 +217,7 @@ mod tests {
         let result = parse(r#"{{>  "/users/jane doe/templates/index.\"temp\".html" }}"#);
         assert_eq!(
             result,
-            vec![Include(
-                r#"/users/jane doe/templates/index.\"temp\".html"#.into()
-            )]
+            vec![Include(r#"/users/jane doe/templates/index.\"temp\".html"#)]
         );
     }
 }
