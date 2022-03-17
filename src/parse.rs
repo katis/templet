@@ -161,10 +161,14 @@ mod tests {
 
     #[test]
     fn simple_variable() {
-        let result = parse("<h1>{{title}}</h1>");
+        let result = parse("<h1>{{head.title}}</h1>");
         assert_eq!(
             result,
-            vec![Text("<h1>"), Variable(vec![Named("title")]), Text("</h1>")]
+            vec![
+                Text("<h1>"),
+                Variable(vec![Named("head"), Named("title")]),
+                Text("</h1>")
+            ]
         );
     }
 
@@ -202,11 +206,11 @@ mod tests {
 
     #[test]
     fn simple_section_index() {
-        let result = parse("{{#0}}{{foobar}}{{/0}}");
+        let result = parse("{{#0.foo}}{{foobar}}{{/0.foo}}");
         assert_eq!(
             result,
             vec![Section(
-                vec![Index(0)],
+                vec![Index(0), Named("foo")],
                 vec![Variable(vec![Named("foobar")])]
             )]
         );
