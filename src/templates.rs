@@ -71,13 +71,19 @@ pub enum TemplateLoadError {
 mod tests {
     use super::*;
 
+    use pretty_assertions::{assert_eq, assert_ne};
     use valuable::Valuable;
 
     #[derive(Valuable)]
     struct Page<'a> {
+        head: Head<'a>,
+        items: &'a [Item<'a>],
+    }
+
+    #[derive(Valuable)]
+    struct Head<'a> {
         title: &'a str,
         css: &'a [&'a str],
-        items: &'a [Item<'a>],
     }
 
     #[derive(Valuable)]
@@ -94,7 +100,7 @@ mod tests {
         );
         map.insert(
             "header".to_string(),
-            Template::parse(r#"<h1>{{title}}</h1>"#.into()),
+            Template::parse(r#"<h1>{{head.title}}</h1>"#.into()),
         );
         map.insert(
             "item".to_string(),
@@ -106,8 +112,10 @@ mod tests {
             .render_to_string(
                 "main",
                 &Page {
-                    title: "Products",
-                    css: &[],
+                    head: Head {
+                        title: "Products",
+                        css: &[],
+                    },
                     items: &[Item { name: "Bread" }, Item { name: "Milk" }],
                 },
             )
@@ -125,8 +133,10 @@ mod tests {
             .render_to_string(
                 "index.html",
                 &Page {
-                    title: "Products",
-                    css: &["/index.css", "/main.css"],
+                    head: Head {
+                        title: "Products",
+                        css: &["/index.css", "/main.css"],
+                    },
                     items: &[Item { name: "Bread" }, Item { name: "Milk" }],
                 },
             )
