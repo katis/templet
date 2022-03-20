@@ -158,15 +158,19 @@ impl<'a, W: Write> Visit for Variable<'a, W> {
         }
 
         match value {
-            Value::Structable(s) => {
-                s.visit(self);
-            }
-            Value::Mappable(m) => {
-                m.visit(self);
+            Value::Structable(s) => s.visit(self),
+            Value::Mappable(m) => m.visit(self),
+            Value::Enumerable(e) if self.path.len() > 1 => {
+                if Field::Named(e.variant().name()) == self.path[0] {
+                    let mut variable = Variable::new(&self.path[1..], self.writer);
+                    e.visit(&mut variable);
+                    self.render_result = variable.render_result;
+                }
             }
             Value::Enumerable(e) => {
                 e.visit(self);
             }
+            Value::Tuplable(t) => t.visit(self),
             _ => (),
         }
     }
@@ -261,6 +265,8 @@ impl<'a, W: Write> Visit for Section<'a, W> {
                 let rnd = self.renderer.append(e.as_value());
                 self.result = rnd.render_parts(self.writer, self.parts);
             }
+            (_, Value::Mappable(m)) => m.visit(self),
+            (_, Value::Tuplable(t)) => t.visit(self),
             _ => (),
         }
     }
@@ -281,6 +287,21 @@ impl<'a, W: Write> Visit for Section<'a, W> {
         if let Field::Index(i) = &self.path[0] {
             if let Some(&value) = values.get(*i as usize) {
                 self.handle_value(value);
+            }
+        }
+    }
+
+    fn visit_entry(&mut self, key: Value<'_>, value: Value<'_>) {
+        if self.result.is_err() {
+            return;
+        }
+
+        if let Field::Named(name) = &self.path[0] {
+            match key {
+                Value::String(s) if s == *name => {
+                    self.handle_value(value);
+                }
+                _ => {}
             }
         }
     }

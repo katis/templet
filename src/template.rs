@@ -355,6 +355,42 @@ mod tests {
     }
 
     #[derive(Valuable)]
+    enum Content<'a> {
+        Url { url: &'a str, title: &'a str },
+        Tag(&'a str),
+    }
+
+    #[derive(Valuable)]
+    struct Preview<'a> {
+        content: Content<'a>,
+    }
+
+    #[test]
+    fn named_enum_variable() {
+        let s = render(
+            r#"<a href="{{content.Url.url}}">{{content.Url.title}}</a>"#,
+            &Preview {
+                content: Content::Url {
+                    url: "www.google.com",
+                    title: "Evil website",
+                },
+            },
+        );
+        assert_eq!(&s, r#"<a href="www.google.com">Evil website</a>"#);
+    }
+
+    #[test]
+    fn unnamed_enum_variable() {
+        let s = render(
+            r##"<a href="#{{content.Tag.0}}">#{{content.Tag.0}}</a>"##,
+            &Preview {
+                content: Content::Tag("tech"),
+            },
+        );
+        assert_eq!(&s, r##"<a href="#tech">#tech</a>"##);
+    }
+
+    #[derive(Valuable)]
     struct Positional<'a>(&'a str, i32);
 
     #[test]
