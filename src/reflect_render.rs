@@ -148,10 +148,7 @@ fn get_fields<'r, 'f>(
 ) -> Option<&'r dyn Reflect> {
     let mut value = reflect;
     for field in fields.iter() {
-        match get_field(value, field) {
-            Some(v) => value = v,
-            None => return None,
-        }
+        value = get_field(value, field)?;
     }
     Some(value)
 }
