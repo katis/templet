@@ -4,11 +4,12 @@ use nom::{
     character::complete::space0,
     combinator::{recognize, rest},
     error::ErrorKind,
-    multi::{many0, many0_count, separated_list1},
+    multi::{fold_many1, many0, many0_count},
     sequence::{delimited, pair},
     Err, IResult,
 };
 use nom_locate::LocatedSpan;
+use nom_unicode::complete::{alpha1, alphanumeric1, upper1};
 
 type Span<'a> = LocatedSpan<&'a str>;
 
@@ -17,18 +18,33 @@ type Result<'a, T = Part<'a>> = IResult<Span<'a>, T>;
 #[derive(Debug, Eq, PartialEq)]
 pub enum Part<'a> {
     Text(&'a str),
-    Variable(Vec<Field<'a>>),
-    Section(Vec<Field<'a>>, Vec<Part<'a>>),
-    InvertedSection(Vec<Field<'a>>, Vec<Part<'a>>),
+    Variable(Access<'a>),
+    Section(Access<'a>, Vec<Part<'a>>),
+    InvertedSection(Access<'a>, Vec<Part<'a>>),
     Include(&'a str),
     Comment,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Field<'a> {
-    Index(u8),
-    Named(&'a str),
+pub enum Access<'a> {
+    Variant(&'a str),
+    Path(Vec<Field<'a>>),
     This,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Field<'a> {
+    Index(usize),
+    Nth(usize),
+    Named(&'a str),
+}
+
+#[derive(Debug)]
+pub enum PathPart<'a> {
+    Index(usize),
+    Nth(usize),
+    Named(&'a str),
+    Dot,
 }
 
 pub fn parse(s: &str) -> Vec<Part> {
@@ -56,7 +72,7 @@ fn parse_comment(input: Span) -> Result {
 
 fn parse_variable(input: Span) -> Result {
     let (input, _) = tag("{{")(input)?;
-    let (input, field) = delimited(space0, field, space0)(input)?;
+    let (input, field) = delimited(space0, access, space0)(input)?;
     let (input, _) = tag("}}")(input)?;
     Ok((input, Part::Variable(field)))
 }
@@ -102,20 +118,20 @@ fn file_path(input: Span) -> Result<Span> {
     )(input)
 }
 
-fn start_tag<'a>(open: &'a str) -> impl Fn(Span<'a>) -> Result<Vec<Field>> + 'a {
+fn start_tag<'a>(open: &'a str) -> impl Fn(Span<'a>) -> Result<Access<'a>> + 'a {
     move |input: Span| {
         let (input, _) = tag(open)(input)?;
-        let (input, field) = delimited(space0, field, space0)(input)?;
+        let (input, tag_access) = delimited(space0, access, space0)(input)?;
         let (input, _) = tag("}}")(input)?;
-        Ok((input, field))
+        Ok((input, tag_access))
     }
 }
 
-fn tag_end<'a>(input: Span<'a>) -> Result<Vec<Field<'a>>> {
+fn tag_end(input: Span) -> Result<Access> {
     let (input, _) = tag("{{/")(input)?;
-    let (input, end_field) = delimited(space0, field, space0)(input)?;
+    let (input, tag_access) = delimited(space0, access, space0)(input)?;
     let (input, _) = tag("}}")(input)?;
-    Ok((input, end_field))
+    Ok((input, tag_access))
 }
 
 fn parse_text(s: Span) -> Result {
@@ -126,102 +142,106 @@ fn parse_text(s: Span) -> Result {
     Ok((input, Part::Text(&text)))
 }
 
-fn path(input: Span) -> Result<Vec<Field>> {
-    separated_list1(tag("."), alt((named, index)))(input)
+fn access(input: Span) -> Result<Access> {
+    alt((access_this, access_variant, access_path))(input)
 }
 
-fn field(input: Span) -> Result<Vec<Field>> {
-    alt((path, this))(input)
-}
-
-fn index(input: Span) -> Result<Field> {
-    let (input, i) = nom::character::complete::u8(input)?;
-    Ok((input, Field::Index(i)))
-}
-
-fn this(input: Span) -> Result<Vec<Field>> {
+fn access_this(input: Span) -> Result<Access> {
     let (input, _) = tag(".")(input)?;
-    Ok((input, vec![Field::This]))
+    Ok((input, Access::This))
 }
 
-fn named(input: Span) -> Result<Field> {
-    let is_begin = alt((tag("_"), nom_unicode::complete::alpha1));
-    let is_rest = many0_count(alt((tag("_"), nom_unicode::complete::alphanumeric1)));
+fn access_variant(input: Span) -> Result<Access> {
+    let (input, name) = recognize(pair(upper1, alphanumeric1))(input)?;
+    Ok((input, Access::Variant(&name)))
+}
 
-    let (input, ident) = recognize(pair(is_begin, is_rest))(input)?;
-    Ok((input, Field::Named(&ident)))
+fn access_path(input: Span) -> Result<Access> {
+    let (input, fields) = fold_many1(
+        path_part,
+        || Vec::new(),
+        |mut acc, part| {
+            match part {
+                PathPart::Index(i) => acc.push(Field::Index(i)),
+                PathPart::Nth(i) => acc.push(Field::Nth(i)),
+                PathPart::Named(n) => acc.push(Field::Named(n)),
+                PathPart::Dot => {}
+            };
+            acc
+        },
+    )(input)?;
+    Ok((input, Access::Path(fields)))
+}
+
+fn path_part(input: Span) -> Result<PathPart> {
+    alt((field_dot, field_index, field_nth, field_identifier))(input)
+}
+
+fn field_dot(input: Span) -> Result<PathPart> {
+    let (input, _) = tag(".")(input)?;
+    Ok((input, PathPart::Dot))
+}
+
+fn field_index(input: Span) -> Result<PathPart> {
+    let (input, number) = delimited(tag("["), nom::character::complete::u128, tag("]"))(input)?;
+    Ok((input, PathPart::Index(number as usize)))
+}
+
+fn field_nth(input: Span) -> Result<PathPart> {
+    let (input, number) = nom::character::complete::u128(input)?;
+    Ok((input, PathPart::Nth(number as usize)))
+}
+
+fn field_identifier(input: Span) -> Result<PathPart> {
+    let (input, name) = recognize(pair(
+        alt((alpha1, tag("_"))),
+        many0_count(alt((alphanumeric1, tag("_")))),
+    ))(input)?;
+    Ok((input, PathPart::Named(&name)))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    use Field::*;
-    use Part::*;
-
     #[test]
-    fn simple_variable() {
-        let result = parse("<h1>{{head.title}}</h1>");
+    fn variable() {
+        use Field::*;
+
+        let this_var = parse("{{ . }}");
+        assert_eq!(this_var, vec![Part::Variable(Access::This)]);
+
+        let path_var = parse("{{ foo[12].1 }}");
         assert_eq!(
-            result,
-            vec![
-                Text("<h1>"),
-                Variable(vec![Named("head"), Named("title")]),
-                Text("</h1>")
-            ]
+            path_var,
+            vec![Part::Variable(Access::Path(vec![
+                Named("foo"),
+                Index(12),
+                Nth(1)
+            ]))]
         );
     }
 
     #[test]
-    fn simple_variable_index() {
-        let result = parse("<h1>{{ 0 }}</h1>");
+    fn access_path() {
+        use Field::*;
+
+        let (_, path) = access(LocatedSpan::new("foo.0.bar.1[12]")).unwrap();
         assert_eq!(
-            result,
-            vec![Text("<h1>"), Variable(vec![Index(0)]), Text("</h1>")]
+            path,
+            Access::Path(vec![Named("foo"), Nth(0), Named("bar"), Nth(1), Index(12)])
         );
     }
 
     #[test]
-    fn text_wtf() {
-        let result = parse("{{/foobar}}");
-        assert_eq!(result, vec![]);
+    fn access_variant() {
+        let (_, variant) = access(LocatedSpan::new("FooBar")).unwrap();
+        assert_eq!(variant, Access::Variant("FooBar"));
     }
 
     #[test]
-    fn simple_section() {
-        let result = parse("\\{{ Cool shit here }}<ul>{{#items}}<li>{{id}}</li>{{/items}}</ul>");
-        assert_eq!(
-            result,
-            vec![
-                Comment,
-                Text("<ul>"),
-                Section(
-                    vec![Named("items")],
-                    vec![Text("<li>"), Variable(vec![Named("id")]), Text("</li>")]
-                ),
-                Text("</ul>")
-            ]
-        );
-    }
-
-    #[test]
-    fn simple_section_index() {
-        let result = parse("{{#0.foo}}{{foobar}}{{/0.foo}}");
-        assert_eq!(
-            result,
-            vec![Section(
-                vec![Index(0), Named("foo")],
-                vec![Variable(vec![Named("foobar")])]
-            )]
-        );
-    }
-
-    #[test]
-    fn simple_include() {
-        let result = parse(r#"{{>  "/users/jane doe/templates/index.\"temp\".html" }}"#);
-        assert_eq!(
-            result,
-            vec![Include(r#"/users/jane doe/templates/index.\"temp\".html"#)]
-        );
+    fn access_this() {
+        let (_, variant) = access(LocatedSpan::new(".")).unwrap();
+        assert_eq!(variant, Access::This);
     }
 }

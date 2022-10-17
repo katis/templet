@@ -1,9 +1,9 @@
 use std::{collections::HashMap, fs, io::Write, path::Path};
 
+use bevy_reflect::Reflect;
 use thiserror::Error;
-use valuable::Valuable;
 
-use crate::{errors::Error, render::Renderer, Template};
+use crate::{errors::Error, reflect_render::Renderer, template::Template};
 
 pub struct Templates {
     templates: HashMap<String, Template>,
@@ -14,20 +14,15 @@ impl Templates {
         Self { templates }
     }
 
-    pub fn render<W: Write>(
-        &self,
-        name: &str,
-        writer: &mut W,
-        data: &dyn Valuable,
-    ) -> Result<(), Error> {
-        let renderer = Renderer::new(&self.templates, data.as_value());
-        renderer.render(name, writer)
+    pub fn render<W: Write>(&self, name: &str, writer: &mut W, data: &dyn Reflect) {
+        let mut renderer = Renderer::new(&self.templates, writer);
+        renderer.render(name, data).unwrap();
     }
 
-    pub fn render_to_string(&self, name: &str, data: &dyn Valuable) -> Result<String, Error> {
-        let renderer = Renderer::new(&self.templates, data.as_value());
+    pub fn render_to_string(&self, name: &str, data: &dyn Reflect) -> Result<String, Error> {
         let mut buf = Vec::new();
-        renderer.render(name, &mut buf)?;
+        let mut renderer = Renderer::new(&self.templates, &mut buf);
+        renderer.render(name, data)?;
         Ok(String::from_utf8(buf).unwrap())
     }
 
@@ -69,54 +64,72 @@ pub enum TemplateLoadError {
 
 #[cfg(test)]
 mod tests {
+
     use super::*;
 
-    use pretty_assertions::{assert_eq, assert_ne};
-    use valuable::Valuable;
+    use bevy_reflect::{FromReflect, Reflect};
+    use pretty_assertions::assert_eq;
 
-    #[derive(Valuable)]
-    struct Page<'a> {
-        head: Head<'a>,
-        items: &'a [Item<'a>],
+    #[derive(Reflect)]
+    struct Page {
+        head: Head,
+        items: Vec<Item>,
+        user: User,
     }
 
-    #[derive(Valuable)]
-    struct Head<'a> {
-        title: &'a str,
-        css: &'a [&'a str],
+    #[derive(Reflect)]
+    struct Head {
+        title: String,
+        css: Vec<String>,
     }
 
-    #[derive(Valuable)]
-    struct Item<'a> {
-        name: &'a str,
+    #[derive(Reflect, FromReflect)]
+    struct Item {
+        name: String,
+    }
+
+    #[derive(Reflect)]
+    enum User {
+        Customer { name: String },
+        Admin,
+    }
+
+    fn compile_templates(sources: Vec<(&'static str, &'static str)>) -> Templates {
+        let mut map = HashMap::new();
+        for (name, src) in sources.iter() {
+            map.insert(name.to_string(), Template::parse(src.to_string()));
+        }
+        Templates::new(map)
     }
 
     #[test]
     fn partials() {
-        let mut map = HashMap::new();
-        map.insert(
-            "main".to_string(),
-            Template::parse(r#"{{>"header"}}<ul>{{#items}}{{> "item"}}{{/items}}</ul>"#.into()),
-        );
-        map.insert(
-            "header".to_string(),
-            Template::parse(r#"<h1>{{head.title}}</h1>"#.into()),
-        );
-        map.insert(
-            "item".to_string(),
-            Template::parse(r#"<li>{{name}}</li>"#.into()),
-        );
+        let templates = compile_templates(vec![
+            (
+                "main",
+                r#"{{>"header"}}<ul>{{#items}}{{> "item"}}{{/items}}</ul>"#,
+            ),
+            ("header", r#"<h1>{{head.title}}</h1>"#),
+            ("item", r#"<li>{{name}}</li>"#),
+        ]);
 
-        let templates = Templates::new(map);
         let str = templates
             .render_to_string(
                 "main",
                 &Page {
                     head: Head {
-                        title: "Products",
-                        css: &[],
+                        title: "Products".into(),
+                        css: vec![],
                     },
-                    items: &[Item { name: "Bread" }, Item { name: "Milk" }],
+                    items: vec![
+                        Item {
+                            name: "Bread".into(),
+                        },
+                        Item {
+                            name: "Milk".into(),
+                        },
+                    ],
+                    user: User::Admin,
                 },
             )
             .unwrap();
@@ -133,11 +146,19 @@ mod tests {
             .render_to_string(
                 "index.html",
                 &Page {
+                    user: User::Admin,
                     head: Head {
-                        title: "Products",
-                        css: &["/index.css", "/main.css"],
+                        title: "Products".into(),
+                        css: vec!["/index.css".into(), "/main.css".into()],
                     },
-                    items: &[Item { name: "Bread" }, Item { name: "Milk" }],
+                    items: vec![
+                        Item {
+                            name: "Bread".into(),
+                        },
+                        Item {
+                            name: "Milk".into(),
+                        },
+                    ],
                 },
             )
             .unwrap();
@@ -173,5 +194,24 @@ mod tests {
 "#
         .trim_start();
         assert_eq!(&str, expected);
+    }
+
+    #[test]
+    fn test_enum_sections() {
+        let templates = compile_templates(vec![(
+            "main",
+            "<div>{{#Customer}}Customer: {{name}}{{/Customer}}</div>",
+        )]);
+
+        let src = templates
+            .render_to_string(
+                "main",
+                &User::Customer {
+                    name: "Jane Doe".into(),
+                },
+            )
+            .unwrap();
+
+        assert_eq!(src, "<div>Customer: Jane Doe</div>");
     }
 }
