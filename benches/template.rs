@@ -151,7 +151,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         };
 
         b.iter(|| {
-            templates.render("template", &mut buf, ctx);
+            templates.render("template", &mut buf, ctx).unwrap();
             buf.clear();
         })
     });

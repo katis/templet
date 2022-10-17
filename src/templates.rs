@@ -14,9 +14,14 @@ impl Templates {
         Self { templates }
     }
 
-    pub fn render<W: Write>(&self, name: &str, writer: &mut W, data: &dyn Reflect) {
+    pub fn render<W: Write>(
+        &self,
+        name: &str,
+        writer: &mut W,
+        data: &dyn Reflect,
+    ) -> Result<(), Error> {
         let mut renderer = Renderer::new(&self.templates, writer);
-        renderer.render(name, data).unwrap();
+        renderer.render(name, data)
     }
 
     pub fn render_to_string(&self, name: &str, data: &dyn Reflect) -> Result<String, Error> {
