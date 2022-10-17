@@ -1,39 +1,39 @@
 use std::collections::HashMap;
 
+use bevy_reflect::{FromReflect, Reflect};
 use criterion::{criterion_group, criterion_main, Criterion};
 use handlebars::Handlebars;
 use ramhorns::Content;
 use serde::Serialize;
 use templet::{Template, Templates};
-use valuable::Valuable;
 
-#[derive(Valuable, Content, Serialize)]
-struct Page<'a> {
-    title: &'a str,
-    products: &'a [Product<'a>],
+#[derive(Reflect, FromReflect, Content, Serialize)]
+struct Page {
+    title: String,
+    products: Vec<Product>,
 }
 
-#[derive(Valuable, Content, Serialize)]
-struct Item<'a> {
-    name: &'a str,
+#[derive(Reflect, FromReflect, Content, Serialize)]
+struct Item {
+    name: String,
 }
 
-#[derive(Valuable, Content, Serialize)]
-struct Product<'a> {
-    name: &'a str,
+#[derive(Reflect, FromReflect, Content, Serialize)]
+struct Product {
+    name: String,
     price: Price,
-    images: &'a [Image<'a>],
+    images: Vec<Image>,
 }
 
-#[derive(Valuable, Content, Serialize)]
+#[derive(Reflect, FromReflect, Content, Serialize)]
 struct Price {
     price: i32,
 }
 
-#[derive(Valuable, Content, Serialize)]
-struct Image<'a> {
-    title: &'a str,
-    href: &'a str,
+#[derive(Reflect, FromReflect, Content, Serialize)]
+struct Image {
+    title: String,
+    href: String,
 }
 
 pub fn criterion_benchmark(c: &mut Criterion) {
@@ -121,29 +121,29 @@ pub fn criterion_benchmark(c: &mut Criterion) {
 
         let mut buf = Vec::new();
         let ctx = &Page {
-            title: "Weird store",
-            products: &[
+            title: "Weird store".into(),
+            products: vec![
                 Product {
-                    name: "Netflix subscription",
-                    images: &[Image {
-                        title: "Netflix",
-                        href: "/netflix.logo.svg",
+                    name: "Netflix subscription".to_owned(),
+                    images: vec![Image {
+                        title: "Netflix".to_owned(),
+                        href: "/netflix.logo.svg".to_owned(),
                     }],
                     price: Price { price: 13 },
                 },
                 Product {
-                    name: "Artisan Bread",
-                    images: &[Image {
-                        title: "Bread",
-                        href: "/bread.jpg",
+                    name: "Artisan Bread".to_owned(),
+                    images: vec![Image {
+                        title: "Bread".to_owned(),
+                        href: "/bread.jpg".to_owned(),
                     }],
                     price: Price { price: 4 },
                 },
                 Product {
-                    name: "Orange juice",
-                    images: &[Image {
-                        title: "Orange juice",
-                        href: "/orange-juice.jpg",
+                    name: "Orange juice".to_owned(),
+                    images: vec![Image {
+                        title: "Orange juice".to_owned(),
+                        href: "/orange-juice.jpg".to_owned(),
                     }],
                     price: Price { price: 4 },
                 },
@@ -151,7 +151,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         };
 
         b.iter(|| {
-            templates.render("template", &mut buf, &ctx).unwrap();
+            templates.render("template", &mut buf, ctx);
             buf.clear();
         })
     });
@@ -160,29 +160,29 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         let template = ramhorns::Template::new(PAGE).unwrap();
         let mut buf = Vec::new();
         let ctx = &Page {
-            title: "Weird store",
-            products: &[
+            title: "Weird store".to_owned(),
+            products: vec![
                 Product {
-                    name: "Netflix subscription",
-                    images: &[Image {
-                        title: "Netflix",
-                        href: "/netflix.logo.svg",
+                    name: "Netflix subscription".to_owned(),
+                    images: vec![Image {
+                        title: "Netflix".to_owned(),
+                        href: "/netflix.logo.svg".to_owned(),
                     }],
                     price: Price { price: 13 },
                 },
                 Product {
-                    name: "Artisan Bread",
-                    images: &[Image {
-                        title: "Bread",
-                        href: "/bread.jpg",
+                    name: "Artisan Bread".to_owned(),
+                    images: vec![Image {
+                        title: "Bread".to_owned(),
+                        href: "/bread.jpg".to_owned(),
                     }],
                     price: Price { price: 4 },
                 },
                 Product {
-                    name: "Orange juice",
-                    images: &[Image {
-                        title: "Orange juice",
-                        href: "/orange-juice.jpg",
+                    name: "Orange juice".to_owned(),
+                    images: vec![Image {
+                        title: "Orange juice".to_owned(),
+                        href: "/orange-juice.jpg".to_owned(),
                     }],
                     price: Price { price: 4 },
                 },
@@ -203,29 +203,29 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         reg.register_template("template", template);
 
         let ctx = &Page {
-            title: "Weird store",
-            products: &[
+            title: "Weird store".to_owned(),
+            products: vec![
                 Product {
-                    name: "Netflix subscription",
-                    images: &[Image {
-                        title: "Netflix",
-                        href: "/netflix.logo.svg",
+                    name: "Netflix subscription".to_owned(),
+                    images: vec![Image {
+                        title: "Netflix".to_owned(),
+                        href: "/netflix.logo.svg".to_owned(),
                     }],
                     price: Price { price: 13 },
                 },
                 Product {
-                    name: "Artisan Bread",
-                    images: &[Image {
-                        title: "Bread",
-                        href: "/bread.jpg",
+                    name: "Artisan Bread".to_owned(),
+                    images: vec![Image {
+                        title: "Bread".to_owned(),
+                        href: "/bread.jpg".to_owned(),
                     }],
                     price: Price { price: 4 },
                 },
                 Product {
-                    name: "Orange juice",
-                    images: &[Image {
-                        title: "Orange juice",
-                        href: "/orange-juice.jpg",
+                    name: "Orange juice".to_owned(),
+                    images: vec![Image {
+                        title: "Orange juice".to_owned(),
+                        href: "/orange-juice.jpg".to_owned(),
                     }],
                     price: Price { price: 4 },
                 },
