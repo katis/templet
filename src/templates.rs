@@ -219,4 +219,68 @@ mod tests {
 
         assert_eq!(src, "<div>Customer: Jane Doe</div>");
     }
+
+    #[test]
+    fn test_option_this() {
+        let templates = compile_templates(vec![("main", "{{.}}")]);
+
+        let src = templates
+            .render_to_string("main", &Some("FOO".to_string()))
+            .unwrap();
+        assert_eq!(src, "FOO");
+    }
+
+    #[derive(Reflect, FromReflect)]
+    struct First {
+        second: Option<Second>,
+    }
+
+    #[derive(Reflect, FromReflect)]
+    struct Second {
+        third: Option<usize>,
+    }
+
+    #[test]
+    fn test_option_path() {
+        let templates = compile_templates(vec![("main", "third: {{second.third}}.")]);
+
+        let src = templates
+            .render_to_string(
+                "main",
+                &Some(First {
+                    second: Some(Second { third: Some(12) }),
+                }),
+            )
+            .unwrap();
+        assert_eq!(src, "third: 12.");
+    }
+
+    #[test]
+    fn test_option_path_missing() {
+        let templates = compile_templates(vec![(
+            "main",
+            "third: {{second.third}}{{^second.third}}N/A{{/second.third}}.",
+        )]);
+
+        let src = templates
+            .render_to_string("main", &Some(First { second: None }))
+            .unwrap();
+        assert_eq!(src, "third: N/A.");
+    }
+
+    #[test]
+    fn test_option_section() {
+        let templates =
+            compile_templates(vec![("main", "({{#second}}Exists: {{third}}{{/second}})")]);
+
+        let src = templates
+            .render_to_string(
+                "main",
+                &Some(First {
+                    second: Some(Second { third: Some(12) }),
+                }),
+            )
+            .unwrap();
+        assert_eq!(src, "(Exists: 12)");
+    }
 }

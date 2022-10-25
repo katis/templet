@@ -1,6 +1,6 @@
 use std::{collections::HashMap, io::Write};
 
-use bevy_reflect::VariantType;
+use bevy_reflect::{Enum, VariantType};
 use bevy_reflect::{
     Reflect,
     ReflectRef::{self, *},
@@ -115,6 +115,14 @@ impl<'a, W: Write> Renderer<'a, W> {
             let escaped = escape(s.as_str());
             write!(self.writer, "{}", escaped)
         } else {
+            if let ReflectRef::Enum(enm) = value.reflect_ref() {
+                if is_option(enm) {
+                    if let Some(value) = option_value(enm) {
+                        self.render_value(value)?;
+                    }
+                    return Ok(());
+                }
+            }
             write!(
                 self.writer,
                 "UNSUPPORTED_VARIABLE_TYPE({})",
@@ -138,7 +146,10 @@ fn get_path<'r, 'a>(reflect: &'r dyn Reflect, access: &'a Access<'a>) -> Option<
             }
         }
         Access::Path(fields) => get_fields(reflect, &fields),
-        Access::This => Some(reflect),
+        Access::This => match reflect.reflect_ref() {
+            ReflectRef::Enum(enm) if is_option(enm) => option_value(enm),
+            _ => Some(reflect),
+        },
     }
 }
 
@@ -155,6 +166,9 @@ fn get_fields<'r, 'f>(
 
 fn get_field<'r, 'f>(reflect: &'r dyn Reflect, field: &'f Field<'f>) -> Option<&'r dyn Reflect> {
     match (field, reflect.reflect_ref()) {
+        (field, Enum(enm)) if is_option(enm) => {
+            option_value(enm).and_then(|value| get_field(value, field))
+        }
         (Field::Index(i), List(list)) => list.get(*i),
         (Field::Index(i), Array(arr)) => arr.get(*i),
         (Field::Nth(n), TupleStruct(ts)) => ts.field(*n),
@@ -163,5 +177,17 @@ fn get_field<'r, 'f>(reflect: &'r dyn Reflect, field: &'f Field<'f>) -> Option<&
         (Field::Named(name), Struct(s)) => s.field(name),
         (Field::Named(name), Enum(enm)) if enm.is_variant(VariantType::Struct) => enm.field(name),
         _ => None,
+    }
+}
+
+fn is_option(enm: &dyn Enum) -> bool {
+    enm.type_name().starts_with("core::option::Option<")
+}
+
+fn option_value(enm: &dyn Enum) -> Option<&dyn Reflect> {
+    if enm.variant_name() == "Some" {
+        enm.field_at(0)
+    } else {
+        None
     }
 }
