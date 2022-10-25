@@ -58,12 +58,20 @@ impl<'a, W: Write> Renderer<'a, W> {
                     }
                 }
                 Part::InvertedSection(access, parts) => {
-                    match get_path(data, access).map(|data| data.reflect_ref()) {
-                        None => self.render_parts(parts, data)?,
+                    let path_data = get_path(data, access);
+                    match path_data.map(|data| data.reflect_ref()) {
+                        None => {
+                            self.render_parts(parts, data)?;
+                        }
                         Some(ReflectRef::List(list)) if list.len() == 0 => {
                             self.render_parts(parts, data)?;
                         }
                         Some(ReflectRef::Array(arr)) if arr.len() == 0 => {
+                            self.render_parts(parts, data)?;
+                        }
+                        Some(ReflectRef::Enum(enm))
+                            if is_option(enm) && enm.variant_name() == "None" =>
+                        {
                             self.render_parts(parts, data)?;
                         }
                         _ => {}
@@ -134,17 +142,11 @@ impl<'a, W: Write> Renderer<'a, W> {
 
 fn get_path<'r, 'a>(reflect: &'r dyn Reflect, access: &'a Access<'a>) -> Option<&'r dyn Reflect> {
     match access {
-        Access::Variant(variant) => {
-            if let ReflectRef::Enum(enm) = reflect.reflect_ref() {
-                if enm.variant_name() == *variant {
-                    Some(reflect)
-                } else {
-                    None
-                }
-            } else {
-                None
-            }
-        }
+        Access::Variant(variant) => match reflect.reflect_ref() {
+            ReflectRef::Enum(enm) if is_option(enm) => option_value(enm),
+            ReflectRef::Enum(enm) if enm.variant_name() == *variant => Some(reflect),
+            _ => None,
+        },
         Access::Path(fields) => get_fields(reflect, &fields),
         Access::This => match reflect.reflect_ref() {
             ReflectRef::Enum(enm) if is_option(enm) => option_value(enm),

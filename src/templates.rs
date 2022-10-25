@@ -257,13 +257,11 @@ mod tests {
 
     #[test]
     fn test_option_path_missing() {
-        let templates = compile_templates(vec![(
-            "main",
-            "third: {{second.third}}{{^second.third}}N/A{{/second.third}}.",
-        )]);
+        let templates =
+            compile_templates(vec![("main", "third: {{third}}{{^third}}N/A{{/third}}.")]);
 
         let src = templates
-            .render_to_string("main", &Some(First { second: None }))
+            .render_to_string("main", &Some(Second { third: None }))
             .unwrap();
         assert_eq!(src, "third: N/A.");
     }
