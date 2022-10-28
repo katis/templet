@@ -1,21 +1,27 @@
 use std::{collections::HashMap, fs, io::Write, path::Path};
 
-use bevy_reflect::{GetTypeRegistration, Reflect};
+use bevy_reflect::{GetTypeRegistration, Reflect, TypeRegistry};
 use thiserror::Error;
 
-use crate::{
-    errors::Error,
-    reflect_render::{ReflectTemplateDisplay, Renderer},
-    template::Template,
-};
+use crate::{errors::Error, reflect_render::Renderer, template::Template};
 
 pub struct Templates {
     templates: HashMap<String, Template>,
+    type_registry: TypeRegistry,
 }
 
 impl Templates {
     pub fn new(templates: HashMap<String, Template>) -> Self {
-        Self { templates }
+        let mut type_registry = TypeRegistry::default();
+        type_registry.register::<String>();
+        Self {
+            templates,
+            type_registry,
+        }
+    }
+
+    pub fn register_type<T: GetTypeRegistration>(&mut self) {
+        self.type_registry.register::<T>();
     }
 
     pub fn render<W: Write, T: Reflect + GetTypeRegistration>(
@@ -24,7 +30,7 @@ impl Templates {
         writer: &mut W,
         data: &T,
     ) -> Result<(), Error> {
-        let mut renderer = Renderer::new(&self.templates, writer);
+        let mut renderer = Renderer::new(&self.type_registry, &self.templates, writer);
         renderer.render(name, data)
     }
 
@@ -34,7 +40,7 @@ impl Templates {
         data: &T,
     ) -> Result<String, Error> {
         let mut buf = Vec::new();
-        let mut renderer = Renderer::new(&self.templates, &mut buf);
+        let mut renderer = Renderer::new(&self.type_registry, &self.templates, &mut buf);
         renderer.render(name, data)?;
         Ok(String::from_utf8(buf).unwrap())
     }
@@ -78,7 +84,7 @@ pub enum TemplateLoadError {
 #[cfg(test)]
 mod tests {
 
-    use crate::reflect_render::TemplateDisplay;
+    use crate::reflect_render::ReflectTemplateDisplay;
 
     use super::*;
 
@@ -304,7 +310,8 @@ mod tests {
 
     #[test]
     fn test_display() {
-        let templates = compile_templates(vec![("main", "display = {{.}}")]);
+        let mut templates = compile_templates(vec![("main", "display = {{.}}")]);
+        templates.register_type::<Foobar>();
         let src = templates.render_to_string("main", &Foobar).unwrap();
         assert_eq!(src, "display = FOOBAR!")
     }

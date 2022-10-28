@@ -1,4 +1,3 @@
-use std::any::TypeId;
 use std::{collections::HashMap, io::Write};
 
 use bevy_reflect::{reflect_trait, Enum, GetTypeRegistration, TypeRegistry, VariantType};
@@ -15,17 +14,21 @@ use crate::{
 };
 
 pub struct Renderer<'a, W> {
+    registry: &'a TypeRegistry,
     templates: &'a HashMap<String, Template>,
     writer: &'a mut W,
-    registry: TypeRegistry,
 }
 
 impl<'a, W: Write> Renderer<'a, W> {
-    pub fn new(templates: &'a HashMap<String, Template>, writer: &'a mut W) -> Self {
+    pub fn new(
+        registry: &'a TypeRegistry,
+        templates: &'a HashMap<String, Template>,
+        writer: &'a mut W,
+    ) -> Self {
         Self {
             templates,
             writer,
-            registry: TypeRegistry::new(),
+            registry,
         }
     }
 
@@ -34,8 +37,6 @@ impl<'a, W: Write> Renderer<'a, W> {
         template: &str,
         data: &T,
     ) -> Result<(), std::io::Error> {
-        self.registry.register::<T>();
-
         if let Some(template) = self.templates.get(template) {
             let parts = template.parts();
             self.render_parts(parts, data)?;
