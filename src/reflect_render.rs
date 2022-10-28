@@ -65,6 +65,11 @@ impl<'a, W: Write> Renderer<'a, W> {
                                     self.render_parts(parts, item)?;
                                 }
                             }
+                            ReflectRef::Value(val) if val.is::<bool>() => {
+                                if let Some(true) = val.downcast_ref::<bool>() {
+                                    self.render_parts(parts, data)?;
+                                }
+                            }
                             _ => self.render_parts(parts, data)?,
                         }
                     }
@@ -85,6 +90,11 @@ impl<'a, W: Write> Renderer<'a, W> {
                             if is_option(enm) && enm.variant_name() == "None" =>
                         {
                             self.render_parts(parts, data)?;
+                        }
+                        Some(ReflectRef::Value(val)) if val.is::<bool>() => {
+                            if let Some(false) = val.downcast_ref::<bool>() {
+                                self.render_parts(parts, data)?;
+                            }
                         }
                         _ => {}
                     }

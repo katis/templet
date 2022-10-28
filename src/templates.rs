@@ -308,4 +308,45 @@ mod tests {
         let src = templates.render_to_string("main", &Foobar).unwrap();
         assert_eq!(src, "display = FOOBAR!")
     }
+
+    #[derive(Reflect)]
+    struct BoolSection {
+        section: bool,
+    }
+
+    #[test]
+    fn test_true_section() {
+        let templates = compile_templates(vec![("main", "{{#section}}OK{{/section}}")]);
+        let src = templates
+            .render_to_string("main", &BoolSection { section: true })
+            .unwrap();
+        assert_eq!(src, "OK");
+    }
+
+    #[test]
+    fn test_false_section() {
+        let templates = compile_templates(vec![("main", "{{#section}}OK{{/section}}")]);
+        let src = templates
+            .render_to_string("main", &BoolSection { section: false })
+            .unwrap();
+        assert_eq!(src, "");
+    }
+
+    #[test]
+    fn test_true_inverted_section() {
+        let templates = compile_templates(vec![("main", "{{^section}}OK{{/section}}")]);
+        let src = templates
+            .render_to_string("main", &BoolSection { section: true })
+            .unwrap();
+        assert_eq!(src, "");
+    }
+
+    #[test]
+    fn test_false_inverted_section() {
+        let templates = compile_templates(vec![("main", "{{^section}}OK{{/section}}")]);
+        let src = templates
+            .render_to_string("main", &BoolSection { section: false })
+            .unwrap();
+        assert_eq!(src, "OK");
+    }
 }
