@@ -1,9 +1,13 @@
 use std::{collections::HashMap, fs, io::Write, path::Path};
 
-use bevy_reflect::Reflect;
+use bevy_reflect::{GetTypeRegistration, Reflect};
 use thiserror::Error;
 
-use crate::{errors::Error, reflect_render::Renderer, template::Template};
+use crate::{
+    errors::Error,
+    reflect_render::{ReflectTemplateDisplay, Renderer},
+    template::Template,
+};
 
 pub struct Templates {
     templates: HashMap<String, Template>,
@@ -14,17 +18,21 @@ impl Templates {
         Self { templates }
     }
 
-    pub fn render<W: Write>(
+    pub fn render<W: Write, T: Reflect + GetTypeRegistration>(
         &self,
         name: &str,
         writer: &mut W,
-        data: &dyn Reflect,
+        data: &T,
     ) -> Result<(), Error> {
         let mut renderer = Renderer::new(&self.templates, writer);
         renderer.render(name, data)
     }
 
-    pub fn render_to_string(&self, name: &str, data: &dyn Reflect) -> Result<String, Error> {
+    pub fn render_to_string<T: Reflect + GetTypeRegistration>(
+        &self,
+        name: &str,
+        data: &T,
+    ) -> Result<String, Error> {
         let mut buf = Vec::new();
         let mut renderer = Renderer::new(&self.templates, &mut buf);
         renderer.render(name, data)?;
@@ -69,6 +77,8 @@ pub enum TemplateLoadError {
 
 #[cfg(test)]
 mod tests {
+
+    use crate::reflect_render::TemplateDisplay;
 
     use super::*;
 
@@ -280,5 +290,22 @@ mod tests {
             )
             .unwrap();
         assert_eq!(src, "(Exists: 12)");
+    }
+
+    #[derive(Reflect)]
+    #[reflect(TemplateDisplay)]
+    struct Foobar;
+
+    impl std::fmt::Display for Foobar {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            write!(f, "FOOBAR!")
+        }
+    }
+
+    #[test]
+    fn test_display() {
+        let templates = compile_templates(vec![("main", "display = {{.}}")]);
+        let src = templates.render_to_string("main", &Foobar).unwrap();
+        assert_eq!(src, "display = FOOBAR!")
     }
 }

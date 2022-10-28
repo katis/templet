@@ -1,6 +1,7 @@
+use std::any::TypeId;
 use std::{collections::HashMap, io::Write};
 
-use bevy_reflect::{Enum, VariantType};
+use bevy_reflect::{reflect_trait, Enum, GetTypeRegistration, TypeRegistry, VariantType};
 use bevy_reflect::{
     Reflect,
     ReflectRef::{self, *},
@@ -16,14 +17,25 @@ use crate::{
 pub struct Renderer<'a, W> {
     templates: &'a HashMap<String, Template>,
     writer: &'a mut W,
+    registry: TypeRegistry,
 }
 
 impl<'a, W: Write> Renderer<'a, W> {
     pub fn new(templates: &'a HashMap<String, Template>, writer: &'a mut W) -> Self {
-        Self { templates, writer }
+        Self {
+            templates,
+            writer,
+            registry: TypeRegistry::new(),
+        }
     }
 
-    pub fn render(&mut self, template: &str, data: &dyn Reflect) -> Result<(), std::io::Error> {
+    pub fn render<T: Reflect + GetTypeRegistration>(
+        &mut self,
+        template: &str,
+        data: &T,
+    ) -> Result<(), std::io::Error> {
+        self.registry.register::<T>();
+
         if let Some(template) = self.templates.get(template) {
             let parts = template.parts();
             self.render_parts(parts, data)?;
@@ -131,11 +143,20 @@ impl<'a, W: Write> Renderer<'a, W> {
                     return Ok(());
                 }
             }
-            write!(
-                self.writer,
-                "UNSUPPORTED_VARIABLE_TYPE({})",
-                value.type_name()
-            )
+
+            if let Some(type_data) = self
+                .registry
+                .get_type_data::<ReflectTemplateDisplay>(value.type_id())
+            {
+                let display_value = type_data.get(value).expect("value to implement Display");
+                write!(self.writer, "{}", display_value)
+            } else {
+                write!(
+                    self.writer,
+                    "UNSUPPORTED_VARIABLE_TYPE({})",
+                    value.type_name()
+                )
+            }
         }
     }
 }
@@ -193,3 +214,8 @@ fn option_value(enm: &dyn Enum) -> Option<&dyn Reflect> {
         None
     }
 }
+
+#[reflect_trait]
+pub trait TemplateDisplay: std::fmt::Display {}
+
+impl<T: std::fmt::Display> TemplateDisplay for T {}
