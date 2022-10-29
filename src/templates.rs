@@ -30,7 +30,7 @@ impl Templates {
         writer: &mut W,
         data: &T,
     ) -> Result<(), Error> {
-        let mut renderer = Renderer::new(&self.type_registry, &self.templates, writer);
+        let mut renderer = Renderer::new(&self.templates, writer);
         renderer.render(name, data)
     }
 
@@ -40,7 +40,7 @@ impl Templates {
         data: &T,
     ) -> Result<String, Error> {
         let mut buf = Vec::new();
-        let mut renderer = Renderer::new(&self.type_registry, &self.templates, &mut buf);
+        let mut renderer = Renderer::new(&self.templates, &mut buf);
         renderer.render(name, data)?;
         Ok(String::from_utf8(buf).unwrap())
     }
@@ -83,8 +83,7 @@ pub enum TemplateLoadError {
 
 #[cfg(test)]
 mod tests {
-
-    use crate::reflect_render::ReflectTemplateDisplay;
+    use crate::reflect_render::Unescaped;
 
     use super::*;
 
@@ -299,30 +298,12 @@ mod tests {
     }
 
     #[derive(Reflect)]
-    #[reflect(TemplateDisplay)]
-    struct Foobar;
-
-    impl std::fmt::Display for Foobar {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            write!(f, "FOOBAR!")
-        }
-    }
-
-    #[test]
-    fn test_display() {
-        let mut templates = compile_templates(vec![("main", "display = {{.}}")]);
-        templates.register_type::<Foobar>();
-        let src = templates.render_to_string("main", &Foobar).unwrap();
-        assert_eq!(src, "display = FOOBAR!")
-    }
-
-    #[derive(Reflect)]
     struct BoolSection {
         section: bool,
     }
 
     #[test]
-    fn test_true_section() {
+    fn true_section() {
         let templates = compile_templates(vec![("main", "{{#section}}OK{{/section}}")]);
         let src = templates
             .render_to_string("main", &BoolSection { section: true })
@@ -331,12 +312,33 @@ mod tests {
     }
 
     #[test]
-    fn test_false_section() {
+    fn false_section() {
         let templates = compile_templates(vec![("main", "{{#section}}OK{{/section}}")]);
         let src = templates
             .render_to_string("main", &BoolSection { section: false })
             .unwrap();
         assert_eq!(src, "");
+    }
+
+    #[derive(Reflect)]
+    struct TupleStruct(String, i32, bool);
+
+    #[test]
+    fn tuple_struct_section() {
+        let templates = compile_templates(vec![("main", "{{#.}}{{.}}, {{/.}}")]);
+        let src = templates
+            .render_to_string("main", &TupleStruct("foo".into(), 42, true))
+            .unwrap();
+        assert_eq!(src, "foo, 42, true, ");
+    }
+
+    #[test]
+    fn tuple_section() {
+        let templates = compile_templates(vec![("main", "{{#.}}{{.}}, {{/.}}")]);
+        let src = templates
+            .render_to_string("main", &("foo".to_owned(), 42, true))
+            .unwrap();
+        assert_eq!(src, "foo, 42, true, ");
     }
 
     #[test]
@@ -355,5 +357,82 @@ mod tests {
             .render_to_string("main", &BoolSection { section: false })
             .unwrap();
         assert_eq!(src, "OK");
+    }
+
+    #[derive(Reflect)]
+    struct UnitEnumTemplate {
+        value: UnitEnum,
+    }
+
+    #[derive(Reflect)]
+    enum UnitEnum {
+        Foo,
+        Bar,
+    }
+
+    #[test]
+    fn render_unit_enum() {
+        let templates = compile_templates(vec![("main", "{{value}}")]);
+        let src = templates
+            .render_to_string(
+                "main",
+                &UnitEnumTemplate {
+                    value: UnitEnum::Bar,
+                },
+            )
+            .unwrap();
+        assert_eq!(src, "bar");
+    }
+
+    #[derive(Reflect)]
+    enum WrapperEnum {
+        String(String),
+        Int(i32),
+    }
+
+    #[test]
+    fn render_wrapper_enum_string() {
+        let templates = compile_templates(vec![("main", "{{0}}")]);
+        let src = templates
+            .render_to_string("main", &WrapperEnum::String("FOOBAR".to_owned()))
+            .unwrap();
+        assert_eq!(src, "FOOBAR");
+    }
+
+    #[test]
+    fn render_wrapper_enum_int() {
+        let templates = compile_templates(vec![("main", "{{0}}")]);
+        let src = templates
+            .render_to_string("main", &WrapperEnum::Int(42))
+            .unwrap();
+        assert_eq!(src, "42");
+    }
+
+    #[test]
+    fn render_escaped() {
+        let templates = compile_templates(vec![("main", "{{.}}")]);
+        let src = templates
+            .render_to_string("main", &"<div>FOOBAR</div>".to_owned())
+            .unwrap();
+        assert_eq!(src, "&lt;div&gt;FOOBAR&lt;&#x2f;div&gt;");
+    }
+
+    #[test]
+    fn render_unescaped() {
+        let templates = compile_templates(vec![("main", "{{.}}")]);
+        let src = templates
+            .render_to_string("main", &Unescaped("<div>FOOBAR</div>".into()))
+            .unwrap();
+        assert_eq!(src, "<div>FOOBAR</div>");
+    }
+
+    #[derive(Reflect)]
+    struct UnitStruct(i32);
+
+    #[test]
+    fn render_unit_struct() {
+        let templates = compile_templates(vec![("main", "{{.}}")]);
+        let src = templates.render_to_string("main", &UnitStruct(42)).unwrap();
+        assert_eq!(src, "42");
     }
 }

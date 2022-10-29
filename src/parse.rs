@@ -157,19 +157,15 @@ fn access_variant(input: Span) -> Result<Access> {
 }
 
 fn access_path(input: Span) -> Result<Access> {
-    let (input, fields) = fold_many1(
-        path_part,
-        || Vec::new(),
-        |mut acc, part| {
-            match part {
-                PathPart::Index(i) => acc.push(Field::Index(i)),
-                PathPart::Nth(i) => acc.push(Field::Nth(i)),
-                PathPart::Named(n) => acc.push(Field::Named(n)),
-                PathPart::Dot => {}
-            };
-            acc
-        },
-    )(input)?;
+    let (input, fields) = fold_many1(path_part, Vec::new, |mut acc, part| {
+        match part {
+            PathPart::Index(i) => acc.push(Field::Index(i)),
+            PathPart::Nth(i) => acc.push(Field::Nth(i)),
+            PathPart::Named(n) => acc.push(Field::Named(n)),
+            PathPart::Dot => {}
+        };
+        acc
+    })(input)?;
     Ok((input, Access::Path(fields)))
 }
 

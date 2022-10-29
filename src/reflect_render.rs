@@ -1,6 +1,6 @@
 use std::{collections::HashMap, io::Write};
 
-use bevy_reflect::{reflect_trait, Enum, GetTypeRegistration, TypeRegistry, VariantType};
+use bevy_reflect::{Enum, GetTypeRegistration, VariantType};
 use bevy_reflect::{
     Reflect,
     ReflectRef::{self, *},
@@ -14,22 +14,13 @@ use crate::{
 };
 
 pub struct Renderer<'a, W> {
-    registry: &'a TypeRegistry,
     templates: &'a HashMap<String, Template>,
     writer: &'a mut W,
 }
 
 impl<'a, W: Write> Renderer<'a, W> {
-    pub fn new(
-        registry: &'a TypeRegistry,
-        templates: &'a HashMap<String, Template>,
-        writer: &'a mut W,
-    ) -> Self {
-        Self {
-            templates,
-            writer,
-            registry,
-        }
+    pub fn new(templates: &'a HashMap<String, Template>, writer: &'a mut W) -> Self {
+        Self { templates, writer }
     }
 
     pub fn render<T: Reflect + GetTypeRegistration>(
@@ -61,6 +52,20 @@ impl<'a, W: Write> Renderer<'a, W> {
                                     self.render_parts(parts, item)?;
                                 }
                             }
+                            ReflectRef::TupleStruct(st) => {
+                                for field in 0..st.field_len() {
+                                    if let Some(value) = st.field(field) {
+                                        self.render_parts(parts, value)?;
+                                    }
+                                }
+                            }
+                            ReflectRef::Tuple(st) => {
+                                for field in 0..st.field_len() {
+                                    if let Some(value) = st.field(field) {
+                                        self.render_parts(parts, value)?;
+                                    }
+                                }
+                            }
                             ReflectRef::Array(arr) => {
                                 for item in arr.iter() {
                                     self.render_parts(parts, item)?;
@@ -81,10 +86,10 @@ impl<'a, W: Write> Renderer<'a, W> {
                         None => {
                             self.render_parts(parts, data)?;
                         }
-                        Some(ReflectRef::List(list)) if list.len() == 0 => {
+                        Some(ReflectRef::List(list)) if list.is_empty() => {
                             self.render_parts(parts, data)?;
                         }
-                        Some(ReflectRef::Array(arr)) if arr.len() == 0 => {
+                        Some(ReflectRef::Array(arr)) if arr.is_empty() => {
                             self.render_parts(parts, data)?;
                         }
                         Some(ReflectRef::Enum(enm))
@@ -145,30 +150,44 @@ impl<'a, W: Write> Renderer<'a, W> {
         } else if let Some(s) = value.downcast_ref::<String>() {
             let escaped = escape(s.as_str());
             write!(self.writer, "{}", escaped)
+        } else if let Some(u) = value.downcast_ref::<Unescaped>() {
+            write!(self.writer, "{}", u.0)
         } else {
-            if let ReflectRef::Enum(enm) = value.reflect_ref() {
-                if is_option(enm) {
+            match value.reflect_ref() {
+                ReflectRef::Enum(enm) if is_option(enm) => {
                     if let Some(value) = option_value(enm) {
                         self.render_value(value)?;
                     }
-                    return Ok(());
+                    Ok(())
+                }
+                ReflectRef::Enum(enm) if enm.is_variant(VariantType::Unit) => {
+                    let variant_name = enm.variant_name().to_lowercase();
+                    write!(self.writer, "{}", &variant_name)?;
+                    Ok(())
+                }
+                ReflectRef::Enum(enm)
+                    if enm.is_variant(VariantType::Tuple) && enm.field_len() == 1 =>
+                {
+                    self.render_value(enm.field_at(0).unwrap())
+                }
+                ReflectRef::TupleStruct(st) if st.field_len() == 1 => {
+                    self.render_value(st.field(0).unwrap())
+                }
+                _ => {
+                    let type_name = value.type_name();
+                    write!(self.writer, "UNSUPPORTED_VARIABLE_VALUE({})", type_name)
                 }
             }
-
-            if let Some(type_data) = self
-                .registry
-                .get_type_data::<ReflectTemplateDisplay>(value.type_id())
-            {
-                let display_value = type_data.get(value).expect("value to implement Display");
-                write!(self.writer, "{}", display_value)
-            } else {
-                write!(
-                    self.writer,
-                    "UNSUPPORTED_VARIABLE_TYPE({})",
-                    value.type_name()
-                )
-            }
         }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Reflect)]
+pub struct Unescaped(pub String);
+
+impl From<String> for Unescaped {
+    fn from(value: String) -> Self {
+        Unescaped(value)
     }
 }
 
@@ -179,7 +198,7 @@ fn get_path<'r, 'a>(reflect: &'r dyn Reflect, access: &'a Access<'a>) -> Option<
             ReflectRef::Enum(enm) if enm.variant_name() == *variant => Some(reflect),
             _ => None,
         },
-        Access::Path(fields) => get_fields(reflect, &fields),
+        Access::Path(fields) => get_fields(reflect, fields),
         Access::This => match reflect.reflect_ref() {
             ReflectRef::Enum(enm) if is_option(enm) => option_value(enm),
             _ => Some(reflect),
@@ -225,8 +244,3 @@ fn option_value(enm: &dyn Enum) -> Option<&dyn Reflect> {
         None
     }
 }
-
-#[reflect_trait]
-pub trait TemplateDisplay: std::fmt::Display {}
-
-impl<T: std::fmt::Display> TemplateDisplay for T {}
