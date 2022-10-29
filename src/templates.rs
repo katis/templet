@@ -320,6 +320,22 @@ mod tests {
         assert_eq!(src, "");
     }
 
+    #[test]
+    fn empty_string_section() {
+        let templates = compile_templates(vec![("main", "{{#.}}CONTENT{{/.}}")]);
+        let src = templates.render_to_string("main", &"".to_owned()).unwrap();
+        assert_eq!(src, "");
+    }
+
+    #[test]
+    fn non_empty_string_section() {
+        let templates = compile_templates(vec![("main", "{{#.}}CONTENT{{/.}}")]);
+        let src = templates
+            .render_to_string("main", &"FOO".to_owned())
+            .unwrap();
+        assert_eq!(src, "CONTENT");
+    }
+
     #[derive(Reflect)]
     struct TupleStruct(String, i32, bool);
 

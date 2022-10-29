@@ -77,6 +77,13 @@ impl<'a, W: Write> Renderer<'a, W> {
                                     self.render_parts(parts, data)?;
                                 }
                             }
+                            ReflectRef::Value(val) if val.is::<String>() => {
+                                match val.downcast_ref::<String>() {
+                                    None => {}
+                                    Some(s) if s.is_empty() => {}
+                                    Some(_) => self.render_parts(parts, data)?,
+                                };
+                            }
                             _ => self.render_parts(parts, data)?,
                         }
                     }
@@ -102,6 +109,12 @@ impl<'a, W: Write> Renderer<'a, W> {
                             if let Some(false) = val.downcast_ref::<bool>() {
                                 self.render_parts(parts, data)?;
                             }
+                        }
+                        Some(ReflectRef::Value(val)) if val.is::<String>() => {
+                            match val.downcast_ref::<String>() {
+                                Some(s) if s.is_empty() => self.render_parts(parts, data)?,
+                                _ => {}
+                            };
                         }
                         _ => {}
                     }
