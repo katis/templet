@@ -1,6 +1,6 @@
 use std::{collections::HashMap, io::Write};
 
-use bevy_reflect::{Enum, GetTypeRegistration, VariantType};
+use bevy_reflect::{Enum, FromReflect, GetTypeRegistration, VariantType};
 use bevy_reflect::{
     Reflect,
     ReflectRef::{self, *},
@@ -196,7 +196,7 @@ impl<'a, W: Write> Renderer<'a, W> {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Reflect)]
+#[derive(Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Reflect, FromReflect)]
 pub struct Unescaped(pub String);
 
 impl From<String> for Unescaped {
