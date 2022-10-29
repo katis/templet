@@ -84,6 +84,11 @@ impl<'a, W: Write> Renderer<'a, W> {
                                     Some(_) => self.render_parts(parts, data)?,
                                 };
                             }
+                            ReflectRef::Enum(enm) if is_option(enm) => {
+                                if let Some(val) = option_value(enm) {
+                                    self.render_parts(parts, val)?;
+                                }
+                            }
                             _ => self.render_parts(parts, data)?,
                         }
                     }

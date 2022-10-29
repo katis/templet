@@ -271,6 +271,17 @@ mod tests {
     }
 
     #[test]
+    fn test_option_section_none() {
+        let templates =
+            compile_templates(vec![("main", "begin {{#third}}middle {{.}}{{/third}} end")]);
+
+        let src = templates
+            .render_to_string("main", &Second { third: None })
+            .unwrap();
+        assert_eq!(src, "begin  end");
+    }
+
+    #[test]
     fn test_option_path_missing() {
         let templates =
             compile_templates(vec![("main", "third: {{third}}{{^third}}N/A{{/third}}.")]);
