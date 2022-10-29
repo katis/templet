@@ -366,8 +366,8 @@ mod tests {
 
     #[derive(Reflect)]
     enum UnitEnum {
-        Foo,
-        Bar,
+        FooBar,
+        Baz,
     }
 
     #[test]
@@ -377,11 +377,11 @@ mod tests {
             .render_to_string(
                 "main",
                 &UnitEnumTemplate {
-                    value: UnitEnum::Bar,
+                    value: UnitEnum::FooBar,
                 },
             )
             .unwrap();
-        assert_eq!(src, "bar");
+        assert_eq!(src, "foo-bar");
     }
 
     #[derive(Reflect)]

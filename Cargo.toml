@@ -11,6 +11,7 @@ keywords = ["html", "template", "mustache", "handlebars"]
 
 [dependencies]
 bevy_reflect = { git = "https://github.com/bevyengine/bevy", rev = "92ba6224b9b66eb77" }
+convert_case = "0.6.0"
 nom = "7.1.0"
 nom-unicode = "0.3.0"
 nom_locate = "4.0.0"

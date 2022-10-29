@@ -5,6 +5,7 @@ use bevy_reflect::{
     Reflect,
     ReflectRef::{self, *},
 };
+use convert_case::{Case, Casing};
 use v_htmlescape::escape;
 
 use crate::parse::Access;
@@ -161,7 +162,7 @@ impl<'a, W: Write> Renderer<'a, W> {
                     Ok(())
                 }
                 ReflectRef::Enum(enm) if enm.is_variant(VariantType::Unit) => {
-                    let variant_name = enm.variant_name().to_lowercase();
+                    let variant_name = enm.variant_name().to_case(Case::Kebab);
                     write!(self.writer, "{}", &variant_name)?;
                     Ok(())
                 }
