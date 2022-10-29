@@ -196,7 +196,7 @@ impl<'a, W: Write> Renderer<'a, W> {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Reflect, FromReflect)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Reflect, FromReflect)]
 pub struct Unescaped(pub String);
 
 impl From<String> for Unescaped {
