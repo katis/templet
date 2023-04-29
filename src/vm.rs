@@ -23,10 +23,10 @@ fn execute(buf: &mut String, bytecode: &mut ByteCode, stack: &mut Stack) -> Resu
         };
         match pc {
             OpCode::PushStr => {
-                write_string(buf, bytecode)?;
+                write_str(buf, bytecode)?;
             }
             OpCode::PushVar => {
-                let path = read_string(bytecode)?;
+                let path = read_str(bytecode)?;
                 let last = stack.last().unwrap().reflect_path(path)?;
                 stack.push(last);
             }
@@ -36,7 +36,7 @@ fn execute(buf: &mut String, bytecode: &mut ByteCode, stack: &mut Stack) -> Resu
                 stack.pop();
             }
             OpCode::StartSection => {
-                let path = read_string(bytecode)?;
+                let path = read_str(bytecode)?;
                 let start_pos = bytecode.position();
                 let list = stack.last().unwrap().reflect_path(path)?;
                 for item in ReflectIter::new(list)? {
@@ -98,13 +98,13 @@ fn write_value(buf: &mut String, value: &dyn Reflect) -> Result<()> {
     Ok(())
 }
 
-fn write_string(buf: &mut String, bytecode: &mut ByteCode) -> Result<()> {
-    let s = read_string(bytecode)?;
+fn write_str(buf: &mut String, bytecode: &mut ByteCode) -> Result<()> {
+    let s = read_str(bytecode)?;
     buf.push_str(s);
     Ok(())
 }
 
-fn read_string<'a>(bytecode: &mut ByteCode<'a>) -> Result<&'a str> {
+fn read_str<'a>(bytecode: &mut ByteCode<'a>) -> Result<&'a str> {
     let len = bytecode.read_u64::<LittleEndian>()? as usize;
     let start = bytecode.position() as usize;
     let end = start + len;
