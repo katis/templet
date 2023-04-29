@@ -1,118 +1,130 @@
 use std::io::Cursor;
 
-use bevy_reflect::{GetPath, List, ListIter, Reflect, ReflectPathError, ReflectRef};
+use bevy_reflect::{GetPath, ListIter, Reflect, ReflectPathError, ReflectRef};
 use byteorder::{LittleEndian, ReadBytesExt};
 use thiserror::Error;
 
-pub struct Vm<'a> {
-    bytecode: Cursor<&'a [u8]>,
+type Stack<'a> = Vec<&'a dyn Reflect>;
+type ByteCode<'a> = Cursor<&'a [u8]>;
+
+fn execute_to(buf: &mut String, bytecode: &[u8], root: &dyn Reflect) -> Result<()> {
+    let mut stack: Stack = vec![root];
+    let mut bytecode = Cursor::new(bytecode);
+    execute(buf, &mut bytecode, &mut stack)?;
+    Ok(())
 }
 
-impl<'a> Vm<'a> {
-    pub fn new(bytecode: &'a [u8]) -> Self {
-        Self {
-            bytecode: Cursor::new(bytecode),
-        }
-    }
-
-    pub fn write(mut self, buf: &mut String, root: &dyn Reflect) -> Result<()> {
-        let mut stack = Vec::<(&dyn Reflect, Option<ReflectIter>, u64)>::new();
-        stack.push((root, None, 0));
-
-        loop {
-            let pc = match self.bytecode.read_u8() {
-                Ok(pc) => pc.try_into()?,
-                Err(err) if err.kind() == std::io::ErrorKind::UnexpectedEof => return Ok(()),
-                Err(err) => return Err(err.into()),
-            };
-            match pc {
-                OpCode::PushStr => {
-                    self.write_string(buf)?;
-                }
-                OpCode::PushVar => {
-                    let path = self.read_string()?;
-                    let (last, _, _) = stack.last().unwrap();
-                    stack.push((last.reflect_path(path)?, None, self.bytecode.position()));
-                }
-                OpCode::WriteVar => {
-                    let (last, _, _) = stack.last().unwrap();
-                    self.write_value(buf, *last)?;
+fn execute(buf: &mut String, bytecode: &mut ByteCode, stack: &mut Stack) -> Result<()> {
+    loop {
+        let pc = match bytecode.read_u8() {
+            Ok(pc) => pc.try_into()?,
+            Err(err) if err.kind() == std::io::ErrorKind::UnexpectedEof => return Ok(()),
+            Err(err) => return Err(err.into()),
+        };
+        match pc {
+            OpCode::PushStr => {
+                write_string(buf, bytecode)?;
+            }
+            OpCode::PushVar => {
+                let path = read_string(bytecode)?;
+                let last = stack.last().unwrap().reflect_path(path)?;
+                stack.push(last);
+            }
+            OpCode::WriteVar => {
+                let last = stack.last().unwrap();
+                write_value(buf, *last)?;
+                stack.pop();
+            }
+            OpCode::StartSection => {
+                let path = read_string(bytecode)?;
+                let start_pos = bytecode.position();
+                let list = stack.last().unwrap().reflect_path(path)?;
+                for item in ReflectIter::new(list)? {
+                    stack.push(item);
+                    bytecode.set_position(start_pos);
+                    execute(buf, bytecode, stack)?;
                     stack.pop();
                 }
-                OpCode::StartSection => {
-                    let path = self.read_string()?;
-                    let (last, _, _) = stack.last().unwrap();
-                    stack.push((last.reflect_path(path)?, self.bytecode.position()));
-                }
-                OpCode::EndSection => todo!(),
+            }
+            OpCode::EndSection => {
+                return Ok(());
             }
         }
     }
+}
 
-    fn write_string(&mut self, buf: &mut String) -> Result<()> {
-        let s = self.read_string()?;
+fn write_value(buf: &mut String, value: &dyn Reflect) -> Result<()> {
+    use std::fmt::Write;
+
+    if let Some(s) = value.downcast_ref::<String>() {
         buf.push_str(s);
-        Ok(())
-    }
-
-    fn write_value(&mut self, buf: &mut String, value: &dyn Reflect) -> Result<()> {
-        use std::fmt::Write;
-
-        if let Some(s) = value.downcast_ref::<String>() {
-            buf.push_str(s);
-        } else if let Some(s) = value.downcast_ref::<bool>() {
-            write!(buf, "{}", s).ok();
-        } else if let Some(s) = value.downcast_ref::<u8>() {
-            write!(buf, "{}", s).ok();
-        } else if let Some(s) = value.downcast_ref::<i8>() {
-            write!(buf, "{}", s).ok();
-        } else if let Some(s) = value.downcast_ref::<u16>() {
-            write!(buf, "{}", s).ok();
-        } else if let Some(s) = value.downcast_ref::<i16>() {
-            write!(buf, "{}", s).ok();
-        } else if let Some(s) = value.downcast_ref::<u32>() {
-            write!(buf, "{}", s).ok();
-        } else if let Some(s) = value.downcast_ref::<i32>() {
-            write!(buf, "{}", s).ok();
-        } else if let Some(s) = value.downcast_ref::<u64>() {
-            write!(buf, "{}", s).ok();
-        } else if let Some(s) = value.downcast_ref::<i64>() {
-            write!(buf, "{}", s).ok();
-        } else if let Some(s) = value.downcast_ref::<u128>() {
-            write!(buf, "{}", s).ok();
-        } else if let Some(s) = value.downcast_ref::<i128>() {
-            write!(buf, "{}", s).ok();
-        } else if let Some(s) = value.downcast_ref::<f32>() {
-            write!(buf, "{}", s).ok();
-        } else if let Some(s) = value.downcast_ref::<f64>() {
-            write!(buf, "{}", s).ok();
-        } else if let ReflectRef::Enum(enm) = value.reflect_ref() {
-            if enm.type_name().starts_with("core::option::Option<") {
-                if let Some(value) = enm.field_at(0) {
-                    self.write_value(buf, value)?;
-                }
-            } else {
-                return Err(Error::UnsupportedType(value.type_name().to_owned()));
+    } else if let Some(s) = value.downcast_ref::<bool>() {
+        write!(buf, "{}", s).ok();
+    } else if let Some(s) = value.downcast_ref::<u8>() {
+        write!(buf, "{}", s).ok();
+    } else if let Some(s) = value.downcast_ref::<i8>() {
+        write!(buf, "{}", s).ok();
+    } else if let Some(s) = value.downcast_ref::<u16>() {
+        write!(buf, "{}", s).ok();
+    } else if let Some(s) = value.downcast_ref::<i16>() {
+        write!(buf, "{}", s).ok();
+    } else if let Some(s) = value.downcast_ref::<u32>() {
+        write!(buf, "{}", s).ok();
+    } else if let Some(s) = value.downcast_ref::<i32>() {
+        write!(buf, "{}", s).ok();
+    } else if let Some(s) = value.downcast_ref::<u64>() {
+        write!(buf, "{}", s).ok();
+    } else if let Some(s) = value.downcast_ref::<i64>() {
+        write!(buf, "{}", s).ok();
+    } else if let Some(s) = value.downcast_ref::<u128>() {
+        write!(buf, "{}", s).ok();
+    } else if let Some(s) = value.downcast_ref::<i128>() {
+        write!(buf, "{}", s).ok();
+    } else if let Some(s) = value.downcast_ref::<f32>() {
+        write!(buf, "{}", s).ok();
+    } else if let Some(s) = value.downcast_ref::<f64>() {
+        write!(buf, "{}", s).ok();
+    } else if let ReflectRef::Enum(enm) = value.reflect_ref() {
+        if enm.type_name().starts_with("core::option::Option<") {
+            if let Some(value) = enm.field_at(0) {
+                write_value(buf, value)?;
             }
         } else {
             return Err(Error::UnsupportedType(value.type_name().to_owned()));
         }
-        Ok(())
+    } else {
+        return Err(Error::UnsupportedType(value.type_name().to_owned()));
     }
+    Ok(())
+}
 
-    fn read_string(&mut self) -> Result<&str> {
-        let len = self.bytecode.read_u64::<LittleEndian>()? as usize;
-        let start = self.bytecode.position() as usize;
-        let end = start + len;
-        let bytes = &self.bytecode.get_ref()[start..end];
-        let str = unsafe { core::str::from_utf8_unchecked(bytes) };
-        self.bytecode.set_position(end as u64);
-        Ok(str)
-    }
+fn write_string(buf: &mut String, bytecode: &mut ByteCode) -> Result<()> {
+    let s = read_string(bytecode)?;
+    buf.push_str(s);
+    Ok(())
+}
+
+fn read_string<'a>(bytecode: &mut ByteCode<'a>) -> Result<&'a str> {
+    let len = bytecode.read_u64::<LittleEndian>()? as usize;
+    let start = bytecode.position() as usize;
+    let end = start + len;
+    let bytes = &bytecode.get_ref()[start..end];
+    let str = unsafe { core::str::from_utf8_unchecked(bytes) };
+    bytecode.set_position(end as u64);
+    Ok(str)
 }
 
 enum ReflectIter<'a> {
     List(ListIter<'a>),
+}
+
+impl<'a> ReflectIter<'a> {
+    fn new(value: &'a dyn Reflect) -> Result<Self> {
+        match value.reflect_ref() {
+            ReflectRef::List(list) => Ok(Self::List(list.iter())),
+            _ => Err(Error::UnsupportedSectionVar(value.type_name().to_owned())),
+        }
+    }
 }
 
 impl<'a> Iterator for ReflectIter<'a> {
@@ -161,6 +173,8 @@ pub enum Error {
     InvalidField(String),
     #[error("unsupported value type: {}", 0)]
     UnsupportedType(String),
+    #[error("unsupported value for section: {}", 0)]
+    UnsupportedSectionVar(String),
 }
 
 impl<'a> From<ReflectPathError<'a>> for Error {
@@ -171,6 +185,8 @@ impl<'a> From<ReflectPathError<'a>> for Error {
 
 #[cfg(test)]
 mod tests {
+    use bevy_reflect::FromReflect;
+
     use crate::{compiler::Compiler, Expr};
 
     use super::*;
@@ -193,15 +209,46 @@ mod tests {
         }
 
         let mut buf = String::new();
-        Vm::new(&bytecode)
-            .write(
-                &mut buf,
-                &Props {
-                    int: Some(113),
-                    str: Some("qwe".into()),
-                },
-            )
-            .unwrap();
+        let props = Props {
+            int: Some(113),
+            str: Some("qwe".into()),
+        };
+        execute_to(&mut buf, &bytecode, &props).unwrap();
+        assert_eq!(&buf, "foobar(113, qwe);");
+    }
+
+    #[test]
+    fn test_section() {
+        let compiler = Compiler::new();
+        let ast = [Expr::Section {
+            var: "items".into(),
+            body: [
+                Expr::String("Item: ".into()),
+                Expr::Var("value".into()),
+                Expr::String("!".into()),
+            ]
+            .into(),
+        }];
+        let bytecode = compiler.compile(ast.into());
+
+        println!("ByteCode:");
+        println!("{:?}", bytecode);
+
+        #[derive(Reflect)]
+        struct Props {
+            items: Vec<Item>,
+        }
+
+        #[derive(Reflect, FromReflect)]
+        struct Item {
+            value: i32,
+        }
+
+        let mut buf = String::new();
+        let props = Props {
+            items: [Item { value: 42 }, Item { value: 666 }].into(),
+        };
+        execute_to(&mut buf, &bytecode, &props).unwrap();
         assert_eq!(&buf, "foobar(113, qwe)");
     }
 }

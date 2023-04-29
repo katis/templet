@@ -26,7 +26,7 @@ impl Compiler {
                 self.compile_push_str(&string);
             }
             Expr::Section { var, body } => {
-                self.compile_push_var(var);
+                self.compile_section(var);
                 for expr in body.into_iter() {
                     self.compile_expr(expr);
                 }
