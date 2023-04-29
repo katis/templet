@@ -8,4 +8,5 @@ edition = "2021"
 [dependencies]
 bevy_reflect = "0.10.1"
 byteorder = "1.4.3"
+quick-xml = "0.28.2"
 thiserror = "1.0.40"
