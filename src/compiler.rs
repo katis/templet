@@ -1,6 +1,3 @@
-use bevy_reflect::ReflectPathError;
-use thiserror::Error;
-
 use crate::{vm::OpCode, Expr};
 
 #[derive(Default)]

@@ -1,6 +1,6 @@
 use std::io::Cursor;
 
-use bevy_reflect::{GetPath, ListIter, Reflect, ReflectPathError, ReflectRef};
+use bevy_reflect::{GetPath, Reflect, ReflectPathError, ReflectRef};
 use byteorder::{LittleEndian, ReadBytesExt};
 use thiserror::Error;
 
@@ -15,12 +15,7 @@ fn execute_to(buf: &mut String, bytecode: &[u8], root: &dyn Reflect) -> Result<(
 }
 
 fn execute(buf: &mut String, bytecode: &mut ByteCode, stack: &mut Stack) -> Result<()> {
-    loop {
-        let pc = match bytecode.read_u8() {
-            Ok(pc) => pc.try_into()?,
-            Err(err) if err.kind() == std::io::ErrorKind::UnexpectedEof => return Ok(()),
-            Err(err) => return Err(err.into()),
-        };
+    while let Some(pc) = read_opcode(bytecode)? {
         match pc {
             OpCode::PushStr => {
                 write_str(buf, bytecode)?;
@@ -37,13 +32,32 @@ fn execute(buf: &mut String, bytecode: &mut ByteCode, stack: &mut Stack) -> Resu
             }
             OpCode::StartSection => {
                 let path = read_str(bytecode)?;
-                let start_pos = bytecode.position();
-                let list = stack.last().unwrap().reflect_path(path)?;
-                for item in ReflectIter::new(list)? {
-                    stack.push(item);
-                    bytecode.set_position(start_pos);
-                    execute(buf, bytecode, stack)?;
-                    stack.pop();
+                let last = stack.last().unwrap();
+                if let ReflectRef::Enum(enm) = last.reflect_ref() {
+                    if enm.variant_name() == path {
+                        execute(buf, bytecode, stack)?;
+                    } else {
+                        execute_skip(buf, bytecode)?;
+                    }
+                } else {
+                    let value = last.reflect_path(path)?;
+                    match value.reflect_ref() {
+                        ReflectRef::Tuple(tuple) => {
+                            execute_iter(buf, bytecode, stack, tuple.iter_fields())?;
+                        }
+                        ReflectRef::List(list) => {
+                            execute_iter(buf, bytecode, stack, list.iter())?;
+                        }
+                        ReflectRef::Array(array) => {
+                            execute_iter(buf, bytecode, stack, array.iter())?;
+                        }
+                        ReflectRef::Map(map) => {
+                            execute_iter(buf, bytecode, stack, map.iter().map(|(k, _)| k))?;
+                        }
+                        _ => {
+                            return Err(Error::UnsupportedSectionVar(value.type_name().to_owned()))
+                        }
+                    }
                 }
             }
             OpCode::EndSection => {
@@ -51,6 +65,50 @@ fn execute(buf: &mut String, bytecode: &mut ByteCode, stack: &mut Stack) -> Resu
             }
         }
     }
+    Ok(())
+}
+
+fn execute_skip(buf: &mut String, bytecode: &mut ByteCode) -> Result<()> {
+    while let Some(pc) = read_opcode(bytecode)? {
+        let mut depth = 0;
+        match pc {
+            OpCode::StartSection => {
+                depth += 1;
+            }
+            OpCode::EndSection => {
+                depth -= 1;
+                if depth == 0 {
+                    return Ok(());
+                }
+            }
+            _ => (),
+        }
+    }
+    Ok(())
+}
+
+fn read_opcode(bytecode: &mut ByteCode) -> Result<Option<OpCode>> {
+    match bytecode.read_u8() {
+        Ok(pc) => pc.try_into().map(Some),
+        Err(err) if err.kind() == std::io::ErrorKind::UnexpectedEof => Ok(None),
+        Err(err) => Err(err.into()),
+    }
+}
+
+fn execute_iter<'a, I: Iterator<Item = &'a dyn Reflect>>(
+    buf: &mut String,
+    bytecode: &mut ByteCode,
+    stack: &mut Stack<'a>,
+    iter: I,
+) -> Result<()> {
+    let start_pos = bytecode.position();
+    for item in iter {
+        stack.push(item);
+        bytecode.set_position(start_pos);
+        execute(buf, bytecode, stack)?;
+        stack.pop();
+    }
+    Ok(())
 }
 
 fn write_value(buf: &mut String, value: &dyn Reflect) -> Result<()> {
@@ -114,36 +172,13 @@ fn read_str<'a>(bytecode: &mut ByteCode<'a>) -> Result<&'a str> {
     Ok(str)
 }
 
-enum ReflectIter<'a> {
-    List(ListIter<'a>),
-}
-
-impl<'a> ReflectIter<'a> {
-    fn new(value: &'a dyn Reflect) -> Result<Self> {
-        match value.reflect_ref() {
-            ReflectRef::List(list) => Ok(Self::List(list.iter())),
-            _ => Err(Error::UnsupportedSectionVar(value.type_name().to_owned())),
-        }
-    }
-}
-
-impl<'a> Iterator for ReflectIter<'a> {
-    type Item = &'a dyn Reflect;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        match self {
-            ReflectIter::List(ref mut iter) => iter.next(),
-        }
-    }
-}
-
 #[repr(u8)]
 pub enum OpCode {
     PushStr = 0x01,
     PushVar = 0x02,
     StartSection = 0x03,
     EndSection = 0x04,
-    WriteVar = 0x05,
+    WriteVar = 0x07,
 }
 
 impl TryFrom<u8> for OpCode {
@@ -155,7 +190,7 @@ impl TryFrom<u8> for OpCode {
             0x02 => Ok(OpCode::PushVar),
             0x03 => Ok(OpCode::StartSection),
             0x04 => Ok(OpCode::EndSection),
-            0x05 => Ok(OpCode::WriteVar),
+            0x07 => Ok(OpCode::WriteVar),
             byte => Err(Error::InvalidOpCode(byte)),
         }
     }
@@ -225,14 +260,11 @@ mod tests {
             body: [
                 Expr::String("Item: ".into()),
                 Expr::Var("value".into()),
-                Expr::String("!".into()),
+                Expr::String("! ".into()),
             ]
             .into(),
         }];
         let bytecode = compiler.compile(ast.into());
-
-        println!("ByteCode:");
-        println!("{:?}", bytecode);
 
         #[derive(Reflect)]
         struct Props {
@@ -249,6 +281,6 @@ mod tests {
             items: [Item { value: 42 }, Item { value: 666 }].into(),
         };
         execute_to(&mut buf, &bytecode, &props).unwrap();
-        assert_eq!(&buf, "foobar(113, qwe)");
+        assert_eq!(&buf, "Item: 42! Item: 666! ");
     }
 }
